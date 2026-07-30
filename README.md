@@ -30,3 +30,16 @@ npm run build
 ```
 
 See `docs/IMPLEMENTATION_PLAN.md` for the delivery roadmap.
+
+## Engineering evidence
+
+FormForge is intentionally developed as a portfolio-quality system rather than
+a UI-only demo. The repository records:
+
+- Product scope and non-functional requirements.
+- API and security boundaries.
+- Architecture decisions and rejected alternatives.
+- A phased implementation and verification plan.
+- How the project demonstrates skills expected in mid-level MERN roles.
+
+Start with `docs/ARCHITECTURE.md` and `docs/CAREER_ALIGNMENT.md`.

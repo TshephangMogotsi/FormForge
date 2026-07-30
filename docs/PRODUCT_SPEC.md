@@ -27,6 +27,21 @@ Enable a user to create a dynamic form, publish it, collect submissions, and rev
 - Advanced conditional logic.
 - A full theme marketplace.
 
+## Non-functional requirements
+
+- Public forms must work comfortably at a 360px viewport.
+- Public form completion must remain usable on slow or unstable connections.
+- Initial client JavaScript should remain below 150 kB gzip unless a measured
+  product need justifies exceeding the budget.
+- All interactive controls must be keyboard accessible and visibly focused.
+- Every protected API operation must enforce ownership on the server.
+- API input, configuration, and third-party responses must be validated.
+- Logs must not include passwords, tokens, raw authentication cookies, or
+  sensitive response content.
+- Health checks must distinguish process health from dependency readiness.
+- Automated checks must cover types, tests, production builds, and dependency
+  vulnerabilities.
+
 ## Definition of done
 
 A demo user can create and configure a form, publish it, submit a public response, and see that response appear in the owner dashboard.

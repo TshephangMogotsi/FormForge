@@ -19,3 +19,32 @@ Every field receives a UUID when created. Submission answers reference that ID, 
 ## ADR-005: Serve client and API from one origin in production
 
 One production origin simplifies HTTP-only authentication cookies and avoids unnecessary cross-origin complexity. Vite proxies `/api` to Express during development.
+
+## ADR-006: Start as a modular monolith
+
+The API remains one deployable Node.js service with feature-based modules.
+FormForge does not currently have the traffic, team boundaries, or independent
+scaling needs that justify microservices. Modules will expose narrow service
+interfaces so a measured boundary can be extracted later without prematurely
+adding distributed-system failure modes.
+
+## ADR-007: Be AWS-ready without coupling the domain to AWS
+
+Application code will depend on interfaces for storage, notifications, and
+third-party integrations. A reference production deployment can use ECS or EC2,
+IAM, CloudWatch, managed secrets, and MongoDB Atlas without putting AWS SDK
+calls throughout domain logic. This preserves local development and testability.
+
+## ADR-008: Treat low-bandwidth performance as a product constraint
+
+Public forms are the highest-reach surface and must remain small, mobile-first,
+and resilient. Heavy builder and analytics features may be loaded separately.
+Performance budgets will be checked in production builds, and claims will be
+based on measurements rather than assumptions.
+
+## ADR-009: Keep AI assistance outside the critical path
+
+AI-assisted form generation may be added after the core workflow is reliable.
+Generated output will be treated as untrusted input, validated against the same
+form schema, and routed through a provider-neutral adapter. Publishing and
+submitting forms must continue working when an AI provider is unavailable.
