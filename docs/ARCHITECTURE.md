@@ -23,7 +23,8 @@ flowchart LR
 ### React client
 
 - Owns interaction state, drag-and-drop behavior, previews, and accessible UI.
-- Uses TanStack Query for remote state and Zustand only for transient builder state.
+- Uses a small typed fetch boundary for the current API surface and local React
+  state for transient builder interactions.
 - Never acts as the authorization boundary.
 - Keeps the public form route smaller than owner-only builder and analytics code.
 
@@ -37,7 +38,7 @@ flowchart LR
 
 ### MongoDB
 
-- Stores users and bounded form definitions.
+- Stores users, hashed session tokens with TTL expiry, and bounded form definitions.
 - Stores unbounded submissions separately from forms.
 - Uses indexes for owner dashboards, public slugs, and chronological response queries.
 
@@ -60,9 +61,14 @@ flowchart LR
 ## Security boundaries
 
 - Authentication establishes identity; authorization is checked per resource.
+- Session cookies contain high-entropy opaque tokens; only SHA-256 token digests
+  are stored in MongoDB, allowing logout and server-side revocation.
+- Ownership is included in MongoDB read, update, and delete filters. An inaccessible
+  resource returns `404` so its existence is not disclosed.
 - Public slugs identify published forms but do not grant owner access.
 - HTTP-only cookies are inaccessible to application JavaScript.
-- CSRF, rate limiting, request-size limits, and security headers are enforced centrally.
+- SameSite cookies, JSON-only request bodies, origin-aware CORS, rate limiting,
+  request-size limits, and security headers reduce common browser and API attacks.
 - Secrets stay in runtime configuration and never enter logs or source control.
 - Generated AI output and third-party responses are treated as untrusted input.
 

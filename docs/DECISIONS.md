@@ -48,3 +48,13 @@ AI-assisted form generation may be added after the core workflow is reliable.
 Generated output will be treated as untrusted input, validated against the same
 form schema, and routed through a provider-neutral adapter. Publishing and
 submitting forms must continue working when an AI provider is unavailable.
+
+## ADR-010: Use revocable opaque sessions
+
+Authentication uses a high-entropy opaque token in an HTTP-only, SameSite
+cookie. MongoDB stores only the SHA-256 digest with a TTL expiry. This adds a
+database lookup to authenticated requests, but it supports real logout,
+server-side revocation, and deletion of expired sessions without placing user
+claims in browser-readable storage. Stateless JWT cookies were rejected for
+this MVP because immediate revocation would require an additional deny-list or
+short refresh-token workflow.

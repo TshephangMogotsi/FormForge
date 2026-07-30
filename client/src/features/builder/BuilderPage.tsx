@@ -235,7 +235,13 @@ function Canvas({
   );
 }
 
-export function BuilderPage({ onBack }: { onBack: () => void }) {
+export function BuilderPage({
+  onBack,
+  formTitle
+}: {
+  onBack: () => void;
+  formTitle: string;
+}) {
   const [fields, setFields] = useState<FormField[]>(starterFields);
   const [selectedId, setSelectedId] = useState<string | null>(starterFields[0]?.id ?? null);
   const [activeLabel, setActiveLabel] = useState<string | null>(null);
@@ -298,7 +304,7 @@ export function BuilderPage({ onBack }: { onBack: () => void }) {
               <ChevronLeft size={19} />
             </button>
             <div>
-              <input aria-label="Form title" defaultValue="Customer feedback" />
+              <input aria-label="Form title" defaultValue={formTitle} />
               <span>
                 Draft <i /> All changes saved locally
               </span>

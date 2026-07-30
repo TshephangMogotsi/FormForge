@@ -1,13 +1,22 @@
 # API contract
 
-All errors use:
+Versioned application routes use `/api/v1`. The unversioned health endpoint is
+reserved for infrastructure checks.
+
+All errors include a correlation ID:
 
 ```json
 {
   "error": {
     "code": "VALIDATION_ERROR",
     "message": "The submitted data is invalid.",
-    "details": {}
+    "details": [
+      {
+        "path": "email",
+        "message": "Enter a valid email address."
+      }
+    ],
+    "requestId": "f58f0407-b88a-49af-b165-bb23645385d0"
   }
 }
 ```
@@ -18,27 +27,41 @@ All errors use:
 
 ## Authentication
 
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `POST /api/auth/logout`
-- `GET /api/auth/me`
+- `POST /api/v1/auth/register` — creates a user and opaque session cookie.
+- `POST /api/v1/auth/login` — verifies credentials and creates a new session.
+- `POST /api/v1/auth/logout` — revokes the current session and clears its cookie.
+- `GET /api/v1/auth/me` — returns the current public user.
+
+Passwords are never returned. The session cookie is HTTP-only, SameSite `Lax`,
+and `Secure` in production.
 
 ## Forms
 
-- `GET /api/forms`
-- `POST /api/forms`
-- `GET /api/forms/:formId`
-- `PATCH /api/forms/:formId`
-- `DELETE /api/forms/:formId`
-- `POST /api/forms/:formId/duplicate`
-- `POST /api/forms/:formId/publish`
+All form endpoints require authentication.
 
-## Public forms
+- `GET /api/v1/forms?page=1&limit=20`
+- `POST /api/v1/forms`
+- `GET /api/v1/forms/:formId`
+- `PATCH /api/v1/forms/:formId`
+- `DELETE /api/v1/forms/:formId`
 
-- `GET /api/public/forms/:slug`
-- `POST /api/public/forms/:slug/submissions`
+List limits are bounded to 50. Read, update, and delete operations scope the
+database query by both `formId` and the authenticated `ownerId`.
 
-## Responses
+Example create request:
 
-- `GET /api/forms/:formId/submissions`
-- `GET /api/forms/:formId/analytics`
+```json
+{
+  "title": "Customer feedback",
+  "description": "A short customer research survey."
+}
+```
+
+## Planned routes
+
+- `POST /api/v1/forms/:formId/duplicate`
+- `POST /api/v1/forms/:formId/publish`
+- `GET /api/v1/public/forms/:slug`
+- `POST /api/v1/public/forms/:slug/submissions`
+- `GET /api/v1/forms/:formId/submissions`
+- `GET /api/v1/forms/:formId/analytics`

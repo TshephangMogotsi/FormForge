@@ -8,8 +8,12 @@ The repository currently includes:
 
 - A React form-builder shell with drag-and-drop field ordering.
 - Editable field properties.
-- An Express API foundation with health checks and safe defaults.
-- MongoDB connection support through `MONGODB_URI`.
+- Registration, login, logout, and session restoration.
+- Revocable Mongo-backed sessions using HTTP-only cookies.
+- Protected form CRUD with server-enforced ownership.
+- A dashboard backed by live API form data.
+- Zod request validation, structured request logs, and correlation IDs.
+- Integration tests for authentication and cross-user isolation.
 - Project specifications, API contracts, and architecture decisions.
 
 ## Local setup

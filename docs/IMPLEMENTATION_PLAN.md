@@ -10,12 +10,12 @@
 
 ## Phase 2 — Authentication and forms
 
-- [ ] Add User and Form Mongoose models.
-- [ ] Add registration, login, logout, and current-user endpoints.
-- [ ] Use secure HTTP-only authentication cookies.
-- [ ] Add protected form CRUD endpoints with ownership checks.
-- [ ] Connect the dashboard to live form data.
-- [ ] Add request validation, structured logs, and auth-focused integration tests.
+- [x] Add User and Form Mongoose models.
+- [x] Add registration, login, logout, and current-user endpoints.
+- [x] Use revocable Mongo-backed sessions in secure HTTP-only cookies.
+- [x] Add protected form CRUD endpoints with ownership checks.
+- [x] Connect the dashboard to live form data.
+- [x] Add request validation, structured logs, and auth-focused integration tests.
 
 ## Phase 3 — Builder persistence
 
@@ -45,7 +45,8 @@
 - [ ] Publish an OpenAPI specification and example requests.
 - [ ] Add Dockerfiles and a local Compose stack with MongoDB.
 - [ ] Add CI for dependency audit, types, tests, and production builds.
-- [ ] Add readiness checks, structured request logging, and error correlation IDs.
+- [ ] Add dependency-aware readiness checks.
+- [x] Add structured request logging and error correlation IDs.
 - [ ] Test the public form at mobile breakpoints and under network throttling.
 - [ ] Add API pagination limits, rate-limit policy, and abuse-case documentation.
 - [ ] Document an AWS reference deployment using ECS or EC2, IAM, CloudWatch,
