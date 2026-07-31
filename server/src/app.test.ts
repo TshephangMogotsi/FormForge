@@ -1,5 +1,5 @@
 import request from "supertest";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app.js";
 import { AuthService } from "./features/auth/auth.service.js";
 import type {
@@ -351,6 +351,47 @@ describe("FormForge API", () => {
       recipientName: "Form Owner",
       expiresInMinutes: 30
     });
+  });
+
+  it("logs only safe metadata when reset email delivery fails", async () => {
+    const logger = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const providerError = Object.assign(
+      new Error("owner@example.com resetToken=do-not-log"),
+      {
+        name: "AccessDeniedException",
+        code: "AccessDenied",
+        $metadata: { httpStatusCode: 403 }
+      }
+    );
+    const service = new PasswordResetService(
+      new InMemoryPasswordResetRepository(),
+      {
+        async send() {
+          throw providerError;
+        }
+      },
+      "https://formforge.example",
+      30
+    );
+
+    await service.request({
+      id: "000000000000000000000001",
+      name: "Form Owner",
+      email: "owner@example.com"
+    });
+
+    expect(logger).toHaveBeenCalledOnce();
+    const loggedEvent = JSON.parse(String(logger.mock.calls[0]?.[0]));
+    expect(loggedEvent).toEqual({
+      level: "error",
+      event: "password_reset.delivery_failed",
+      errorName: "AccessDeniedException",
+      errorCode: "AccessDenied",
+      httpStatusCode: 403
+    });
+    expect(JSON.stringify(loggedEvent)).not.toContain("owner@example.com");
+    expect(JSON.stringify(loggedEvent)).not.toContain("do-not-log");
+    logger.mockRestore();
   });
 
   it("resets a password once and revokes every existing session", async () => {

@@ -7,6 +7,26 @@ function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
 
+function getDeliveryErrorMetadata(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return {};
+  }
+
+  const candidate = error as {
+    name?: unknown;
+    code?: unknown;
+    $metadata?: { httpStatusCode?: unknown };
+  };
+
+  return {
+    ...(typeof candidate.name === "string" ? { errorName: candidate.name } : {}),
+    ...(typeof candidate.code === "string" ? { errorCode: candidate.code } : {}),
+    ...(typeof candidate.$metadata?.httpStatusCode === "number"
+      ? { httpStatusCode: candidate.$metadata.httpStatusCode }
+      : {})
+  };
+}
+
 export class PasswordResetService {
   constructor(
     private readonly resets: PasswordResetRepository,
@@ -33,11 +53,12 @@ export class PasswordResetService {
         resetUrl: resetUrl.toString(),
         expiresInMinutes: this.ttlMinutes
       });
-    } catch {
+    } catch (error) {
       console.error(
         JSON.stringify({
           level: "error",
-          event: "password_reset.delivery_failed"
+          event: "password_reset.delivery_failed",
+          ...getDeliveryErrorMetadata(error)
         })
       );
     }
