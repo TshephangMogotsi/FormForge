@@ -16,7 +16,7 @@ jobs:
       id-token: write
     environment:
       name: production
-      url: ${{ steps.deploy.outputs.endpoint }}
+      url: ${{ steps.endpoint.outputs.url }}
 
     steps:
       - name: Assume the AWS delivery role
@@ -73,9 +73,20 @@ jobs:
             ]
           mutate-tags-on-update: "true"
 
+      - name: Normalize the public endpoint
+        id: endpoint
+        env:
+          RAW_ENDPOINT: ${{ steps.deploy.outputs.endpoint }}
+        run: |
+          case "$RAW_ENDPOINT" in
+            http://*|https://*) ENDPOINT="$RAW_ENDPOINT" ;;
+            *) ENDPOINT="https://$RAW_ENDPOINT" ;;
+          esac
+          echo "url=$ENDPOINT" >> "$GITHUB_OUTPUT"
+
       - name: Smoke-test the public health endpoint
         env:
-          ENDPOINT: ${{ steps.deploy.outputs.endpoint }}
+          ENDPOINT: ${{ steps.endpoint.outputs.url }}
         run: |
           curl --fail --show-error \
             --retry 10 \
@@ -85,5 +96,5 @@ jobs:
 
       - name: Publish the deployment endpoint
         env:
-          ENDPOINT: ${{ steps.deploy.outputs.endpoint }}
+          ENDPOINT: ${{ steps.endpoint.outputs.url }}
         run: echo "Production endpoint — $ENDPOINT" >> "$GITHUB_STEP_SUMMARY"
