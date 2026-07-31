@@ -61,7 +61,7 @@ repository's `.env` file.
 | --- | --- |
 | `NODE_ENV=production` | Enables secure cookies, trusted proxy handling, and static client serving |
 | `PORT` | Port assigned by the hosting platform |
-| `CLIENT_ORIGIN` | Public HTTPS origin, such as `https://forms.example.com` |
+| `CLIENT_ORIGIN` | Allowed Vite origin during local development; production CORS is disabled |
 | `MONGODB_URI` | Atlas connection string for the production database user |
 | `SESSION_TTL_HOURS` | Server-side and cookie session lifetime |
 

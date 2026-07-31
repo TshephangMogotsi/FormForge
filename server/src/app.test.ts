@@ -118,7 +118,9 @@ class InMemoryFormRepository implements FormRepository {
   }
 }
 
-function createTestApp() {
+function createTestApp(
+  options?: Parameters<typeof createApp>[1]
+) {
   const users = new InMemoryUserRepository();
   const forms = new InMemoryFormRepository();
   const auth = new AuthService(
@@ -127,10 +129,13 @@ function createTestApp() {
     4
   );
 
-  return createApp({
-    auth,
-    forms: new FormService(forms)
-  });
+  return createApp(
+    {
+      auth,
+      forms: new FormService(forms)
+    },
+    options
+  );
 }
 
 async function register(
@@ -174,6 +179,15 @@ describe("FormForge API", () => {
         requestId: expect.any(String)
       }
     });
+  });
+
+  it("does not emit cross-origin permissions when production CORS is disabled", async () => {
+    const response = await request(createTestApp({ corsOrigin: false }))
+      .options("/api/health")
+      .set("Origin", "https://untrusted.example")
+      .set("Access-Control-Request-Method", "GET");
+
+    expect(response.headers).not.toHaveProperty("access-control-allow-origin");
   });
 
   it("registers a user with a protected cookie and returns the current user", async () => {

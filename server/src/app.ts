@@ -23,6 +23,10 @@ export type AppServices = {
   forms: FormService;
 };
 
+export type AppOptions = {
+  corsOrigin?: string | false;
+};
+
 const clientDistPath = fileURLToPath(new URL("../../client/dist", import.meta.url));
 
 function createDefaultServices(): AppServices {
@@ -35,8 +39,14 @@ function createDefaultServices(): AppServices {
   };
 }
 
-export function createApp(services = createDefaultServices()) {
+export function createApp(
+  services = createDefaultServices(),
+  options: AppOptions = {}
+) {
   const app = express();
+  const corsOrigin =
+    options.corsOrigin ??
+    (env.NODE_ENV === "production" ? false : env.CLIENT_ORIGIN);
 
   app.disable("x-powered-by");
   if (env.NODE_ENV === "production") {
@@ -44,12 +54,14 @@ export function createApp(services = createDefaultServices()) {
   }
 
   app.use(helmet());
-  app.use(
-    cors({
-      origin: env.CLIENT_ORIGIN,
-      credentials: true
-    })
-  );
+  if (corsOrigin) {
+    app.use(
+      cors({
+        origin: corsOrigin,
+        credentials: true
+      })
+    );
+  }
   app.use(express.json({ limit: "100kb" }));
   app.use(cookieParser());
   app.use(requestContext);

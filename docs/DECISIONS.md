@@ -93,3 +93,15 @@ real Fargate, load-balancer, IAM, CloudWatch, and deployment story while AWS
 manages their common wiring. A hand-built VPC and ECS service would offer more
 network control, but that complexity is deferred until the Atlas egress
 requirement and operating cost justify it.
+
+## ADR-013: Disable CORS in the same-origin production service
+
+The production container serves React and the API from the same HTTPS origin,
+so browsers do not need cross-origin permissions. Production omits CORS headers
+entirely; local development retains an explicit `CLIENT_ORIGIN` for the Vite
+dev-server proxy boundary.
+
+Reflecting arbitrary origins was rejected because credentialed requests use
+HTTP-only session cookies. Maintaining a production origin allowlist was also
+rejected for the initial same-origin deployment because it adds configuration
+without enabling a required client.
