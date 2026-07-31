@@ -40,6 +40,12 @@ Parameters:
     AllowedPattern: "^[A-Za-z0-9._/-]+$"
     Description: Branch allowed to assume the deployment role.
 
+  GitHubEnvironment:
+    Type: String
+    Default: production
+    AllowedPattern: "^[A-Za-z0-9._-]+$"
+    Description: GitHub environment allowed to deploy the production service.
+
 Resources:
   ApplicationCluster:
     Type: AWS::ECS::Cluster
@@ -182,7 +188,9 @@ Resources:
             Condition:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
-                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubOwner}@${GitHubOwnerId}/${GitHubRepository}@${GitHubRepositoryId}:ref:refs/heads/${GitHubBranch}"
+                token.actions.githubusercontent.com:sub:
+                  - !Sub "repo:${GitHubOwner}@${GitHubOwnerId}/${GitHubRepository}@${GitHubRepositoryId}:ref:refs/heads/${GitHubBranch}"
+                  - !Sub "repo:${GitHubOwner}@${GitHubOwnerId}/${GitHubRepository}@${GitHubRepositoryId}:environment:${GitHubEnvironment}"
       Policies:
         - PolicyName: PublishFormForgeImages
           PolicyDocument:

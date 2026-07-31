@@ -79,11 +79,12 @@ starting compute. The runtime is created only after cost and database-network
 access are reviewed.
 
 GitHub Actions receives short-lived AWS credentials only when the exact
-`main`-branch subject for this repository assumes the deployment role. Because
-this repository uses GitHub's immutable OIDC subjects, the trust policy pins
-both the owner and repository database IDs as well as their names. The workflow
-can push only to FormForge's ECR repository, manage the ECS Express service, and
-pass only its dedicated execution and infrastructure roles.
+`main`-branch publishing subject or the `production` environment subject for
+this repository assumes the deployment role. Because this repository uses
+GitHub's immutable OIDC subjects, the trust policy pins both the owner and
+repository database IDs as well as their names. The workflow can push only to
+FormForge's ECR repository, manage the ECS Express service, and pass only its
+dedicated execution and infrastructure roles.
 Long-lived AWS access keys in GitHub were rejected because OIDC removes secret
 rotation and credential-leak risk. Granting GitHub administrator access was
 rejected because the delivery workflow does not need account-wide control.

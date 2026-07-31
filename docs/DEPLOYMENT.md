@@ -42,7 +42,8 @@ repository and IAM boundaries, but no running compute.
 
 GitHub Actions authenticates through OIDC. Its trust policy accepts only the
 immutable owner/repository identity for `TshephangMogotsi/FormForge` on
-`refs/heads/main`, and its permissions are limited to:
+`refs/heads/main` or its `production` environment, and its permissions are
+limited to:
 
 - publishing images to the FormForge ECR repository;
 - creating or updating the ECS Express service;
