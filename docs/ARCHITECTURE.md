@@ -82,20 +82,25 @@ flowchart TB
     LB --> Service["Containerized Node.js service"]
     Service --> Atlas["MongoDB Atlas"]
     Service --> Logs["CloudWatch logs and alarms"]
-    CI["CI/CD pipeline"] --> Registry["Container registry"]
+    CI["GitHub Actions with AWS OIDC"] --> Registry["Private ECR repository"]
     Registry --> Service
-    Secrets["Managed secrets"] --> Service
+    Secrets["SSM Parameter Store"] --> Service
 ```
 
 The React application and Express API are packaged in the same container and
-served from one public origin. GitHub Actions verifies every proposed change
-and publishes successful `main` builds to GitHub Container Registry with an
-immutable commit-SHA tag. The host deploys that exact artifact rather than
-rebuilding source independently.
+served from one public origin. GitHub Actions verifies every proposed change.
+The AWS deployment path assumes a narrowly scoped role through OIDC, pushes an
+immutable commit-SHA image to ECR, and deploys that exact artifact rather than
+rebuilding source independently. Runtime secrets are resolved by the ECS task
+execution role from SSM Parameter Store.
 
-AWS ECS is the preferred reference deployment when container orchestration is
-worth the operational cost; EC2 is an acceptable simpler alternative. Lambda
-and API Gateway are not introduced merely to list services on a résumé.
+ECS Express Mode is the preferred first AWS runtime because it provides a real
+Fargate and Application Load Balancer deployment while reducing undifferentiated
+networking setup. The IAM and registry foundation is provisioned separately so
+it can be reviewed without creating continuously billed compute. EC2 remains an
+acceptable alternative if operating cost or Atlas networking makes it the
+better measured choice. Lambda and API Gateway are not introduced merely to
+list services on a résumé.
 
 ## Scaling path
 

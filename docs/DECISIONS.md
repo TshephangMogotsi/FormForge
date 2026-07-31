@@ -70,3 +70,24 @@ can promote or roll back an already-verified image without rebuilding it.
 Separate client and API deployments were rejected for the initial launch
 because they add cross-origin cookie configuration, coordinated releases, and
 another operational surface without providing a current scaling benefit.
+
+## ADR-012: Federate GitHub Actions into a staged AWS deployment
+
+AWS infrastructure is introduced in two stages. The foundation creates a
+private ECR repository, GitHub OIDC trust, and narrowly scoped ECS roles without
+starting compute. The runtime is created only after cost and database-network
+access are reviewed.
+
+GitHub Actions receives short-lived AWS credentials only when the exact
+`main`-branch subject for this repository assumes the deployment role. The
+workflow can push only to FormForge's ECR repository, manage the ECS Express
+service, and pass only its dedicated execution and infrastructure roles.
+Long-lived AWS access keys in GitHub were rejected because OIDC removes secret
+rotation and credential-leak risk. Granting GitHub administrator access was
+rejected because the delivery workflow does not need account-wide control.
+
+ECS Express Mode is preferred for the first AWS runtime because it preserves a
+real Fargate, load-balancer, IAM, CloudWatch, and deployment story while AWS
+manages their common wiring. A hand-built VPC and ECS service would offer more
+network control, but that complexity is deferred until the Atlas egress
+requirement and operating cost justify it.

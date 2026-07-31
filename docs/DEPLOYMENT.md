@@ -30,6 +30,24 @@ The hosting platform should deploy an immutable `sha-*` image after it passes
 the health check. Rollback means selecting the previous known-good SHA rather
 than rebuilding old source.
 
+## AWS delivery foundation
+
+The AWS reference deployment uses ECS Express Mode in `eu-west-1`. The
+CloudFormation template in `infra/foundation.yml` creates the private ECR
+repository and IAM boundaries, but no running compute.
+
+GitHub Actions authenticates through OIDC. Its trust policy accepts only
+`TshephangMogotsi/FormForge` runs from `refs/heads/main`, and its permissions are
+limited to:
+
+- publishing images to the FormForge ECR repository;
+- creating or updating the ECS Express service;
+- passing the dedicated ECS execution and infrastructure roles.
+
+The production Atlas URI is supplied to ECS from the SSM Parameter Store
+`SecureString` `/formforge/production/mongodb-uri`. It is never stored in the
+repository or GitHub.
+
 ## Runtime configuration
 
 Production secrets belong in the hosting platform, never in GitHub or the
@@ -50,11 +68,12 @@ Before exposing the service:
 - configure TLS and the final `CLIENT_ORIGIN`;
 - create a least-privilege Atlas user for the `formforge` database;
 - allow only the API infrastructure's stable outbound address in Atlas;
+- confirm the ECS and load-balancer credit consumption before creating them;
 - verify registration, login, logout, form creation, and session restoration;
 - verify `/api/health` from outside the hosting network;
 - protect `main` so verification must pass before merge;
 - retain the preceding container SHA for rollback.
 
 Infrastructure-specific deployment is intentionally separate from application
-delivery. The same verified image can run on EC2, ECS, App Runner, or another
-container host without changing domain code.
+delivery. The same verified image can run on EC2, ECS, or another container
+host without changing domain code.

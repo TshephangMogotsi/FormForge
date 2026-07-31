@@ -1,0 +1,249 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  FormForge delivery foundation: ECR, GitHub OIDC, and least-privilege roles
+  for Amazon ECS Express Mode. This stack does not create running compute.
+
+Parameters:
+  ApplicationName:
+    Type: String
+    Default: formforge
+    AllowedPattern: "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+    Description: Lowercase application name used for AWS resource names.
+
+  GitHubOwner:
+    Type: String
+    Default: TshephangMogotsi
+    AllowedPattern: "^[A-Za-z0-9_.-]+$"
+    Description: GitHub organization or account that owns the repository.
+
+  GitHubRepository:
+    Type: String
+    Default: FormForge
+    AllowedPattern: "^[A-Za-z0-9_.-]+$"
+    Description: GitHub repository allowed to deploy to AWS.
+
+  GitHubBranch:
+    Type: String
+    Default: main
+    AllowedPattern: "^[A-Za-z0-9._/-]+$"
+    Description: Branch allowed to assume the deployment role.
+
+Resources:
+  ContainerRepository:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      RepositoryName: !Ref ApplicationName
+      EmptyOnDelete: true
+      EncryptionConfiguration:
+        EncryptionType: AES256
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      ImageTagMutability: IMMUTABLE
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Remove untagged images after seven days",
+                "selection": {
+                  "tagStatus": "untagged",
+                  "countType": "sinceImagePushed",
+                  "countUnit": "days",
+                  "countNumber": 7
+                },
+                "action": {
+                  "type": "expire"
+                }
+              },
+              {
+                "rulePriority": 2,
+                "description": "Keep the twenty most recent release images",
+                "selection": {
+                  "tagStatus": "tagged",
+                  "tagPrefixList": ["sha-"],
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 20
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+      Tags:
+        - Key: Application
+          Value: !Ref ApplicationName
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      Tags:
+        - Key: Application
+          Value: !Ref ApplicationName
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ApplicationName}-ecs-task-execution"
+      Path: /formforge/
+      Description: Pulls the FormForge image, writes logs, and reads runtime secrets.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: ReadFormForgeProductionParameters
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ReadRuntimeParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameters
+                Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/formforge/production/*"
+      Tags:
+        - Key: Application
+          Value: !Ref ApplicationName
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  ExpressInfrastructureRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ApplicationName}-ecs-express-infrastructure"
+      Path: /formforge/
+      Description: Allows ECS Express Mode to manage its load-balancing infrastructure.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSInfrastructureRoleforExpressGatewayServices
+      Tags:
+        - Key: Application
+          Value: !Ref ApplicationName
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  GitHubDeploymentRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ApplicationName}-github-deployment"
+      Path: /formforge/
+      Description: Allows verified main-branch GitHub Actions runs to publish and deploy FormForge.
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Ref GitHubOidcProvider
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubOwner}/${GitHubRepository}:ref:refs/heads/${GitHubBranch}"
+      Policies:
+        - PolicyName: PublishFormForgeImages
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: AuthenticateToEcr
+                Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: "*"
+              - Sid: PushImages
+                Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:BatchGetImage
+                  - ecr:CompleteLayerUpload
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:InitiateLayerUpload
+                  - ecr:PutImage
+                  - ecr:UploadLayerPart
+                Resource: !GetAtt ContainerRepository.Arn
+        - PolicyName: DeployFormForgeExpressService
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ManageExpressService
+                Effect: Allow
+                Action:
+                  - ecs:CreateCluster
+                  - ecs:CreateExpressGatewayService
+                  - ecs:DescribeClusters
+                  - ecs:DescribeExpressGatewayService
+                  - ecs:DescribeServiceDeployments
+                  - ecs:DescribeServices
+                  - ecs:ListServiceDeployments
+                  - ecs:RegisterTaskDefinition
+                  - ecs:TagResource
+                  - ecs:UntagResource
+                  - ecs:UpdateExpressGatewayService
+                Resource: "*"
+              - Sid: PassTaskExecutionRole
+                Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource: !GetAtt TaskExecutionRole.Arn
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: ecs-tasks.amazonaws.com
+              - Sid: PassExpressInfrastructureRole
+                Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource: !GetAtt ExpressInfrastructureRole.Arn
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: ecs.amazonaws.com
+      Tags:
+        - Key: Application
+          Value: !Ref ApplicationName
+        - Key: ManagedBy
+          Value: CloudFormation
+
+Outputs:
+  ContainerRepositoryName:
+    Description: ECR repository name used by the delivery workflow.
+    Value: !Ref ContainerRepository
+
+  ContainerRepositoryUri:
+    Description: ECR repository URI used to tag release images.
+    Value: !GetAtt ContainerRepository.RepositoryUri
+
+  GitHubDeploymentRoleArn:
+    Description: Role assumed by GitHub Actions through OIDC.
+    Value: !GetAtt GitHubDeploymentRole.Arn
+
+  TaskExecutionRoleArn:
+    Description: ECS task execution role used by FormForge.
+    Value: !GetAtt TaskExecutionRole.Arn
+
+  ExpressInfrastructureRoleArn:
+    Description: Infrastructure role used by ECS Express Mode.
+    Value: !GetAtt ExpressInfrastructureRole.Arn
+
+  MongoDbParameterName:
+    Description: Expected SSM SecureString name for the production MongoDB URI.
+    Value: /formforge/production/mongodb-uri

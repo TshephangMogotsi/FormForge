@@ -43,14 +43,17 @@
 ## Phase 6 — Production engineering evidence
 
 - [ ] Publish an OpenAPI specification and example requests.
-- [ ] Add Dockerfiles and a local Compose stack with MongoDB.
-- [ ] Add CI for dependency audit, types, tests, and production builds.
+- [x] Add a production Dockerfile for the same-origin application.
+- [ ] Add a local Compose stack with MongoDB.
+- [x] Add CI for types, tests, production builds, and immutable container images.
 - [ ] Add dependency-aware readiness checks.
 - [x] Add structured request logging and error correlation IDs.
 - [ ] Test the public form at mobile breakpoints and under network throttling.
 - [ ] Add API pagination limits, rate-limit policy, and abuse-case documentation.
-- [ ] Document an AWS reference deployment using ECS or EC2, IAM, CloudWatch,
-  managed secrets, and MongoDB Atlas.
+- [x] Document and codify the AWS registry, OIDC, IAM, and managed-secret
+  foundation for an ECS reference deployment.
+- [ ] Resolve the production Atlas network-access boundary.
+- [ ] Deploy the ECS runtime and verify CloudWatch logs and health checks.
 - [ ] Add a rollback-aware deployment workflow and operational runbook.
 
 ## Optional differentiator after the core is complete
