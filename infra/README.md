@@ -9,7 +9,8 @@ can be reviewed before any continuously billed runtime is created.
 
 - a private ECR repository with immutable tags, scanning, and retention rules;
 - a GitHub OIDC provider;
-- a GitHub deployment role restricted to this repository's `main` branch;
+- a GitHub deployment role restricted to this repository's immutable owner and
+  repository identity on `main`;
 - the execution and infrastructure roles required by ECS Express Mode.
 
 It does **not** create ECS tasks, a load balancer, a NAT gateway, or any other

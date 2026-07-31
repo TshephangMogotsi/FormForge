@@ -16,11 +16,23 @@ Parameters:
     AllowedPattern: "^[A-Za-z0-9_.-]+$"
     Description: GitHub organization or account that owns the repository.
 
+  GitHubOwnerId:
+    Type: String
+    Default: "58113691"
+    AllowedPattern: "^[0-9]+$"
+    Description: Immutable GitHub database ID of the repository owner.
+
   GitHubRepository:
     Type: String
     Default: FormForge
     AllowedPattern: "^[A-Za-z0-9_.-]+$"
     Description: GitHub repository allowed to deploy to AWS.
+
+  GitHubRepositoryId:
+    Type: String
+    Default: "1317925014"
+    AllowedPattern: "^[0-9]+$"
+    Description: Immutable GitHub database ID of the repository.
 
   GitHubBranch:
     Type: String
@@ -160,7 +172,7 @@ Resources:
             Condition:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
-                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubOwner}/${GitHubRepository}:ref:refs/heads/${GitHubBranch}"
+                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubOwner}@${GitHubOwnerId}/${GitHubRepository}@${GitHubRepositoryId}:ref:refs/heads/${GitHubBranch}"
       Policies:
         - PolicyName: PublishFormForgeImages
           PolicyDocument:

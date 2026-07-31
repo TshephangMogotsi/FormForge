@@ -40,9 +40,9 @@ The AWS reference deployment uses ECS Express Mode in `eu-west-1`. The
 CloudFormation template in `infra/foundation.yml` creates the private ECR
 repository and IAM boundaries, but no running compute.
 
-GitHub Actions authenticates through OIDC. Its trust policy accepts only
-`TshephangMogotsi/FormForge` runs from `refs/heads/main`, and its permissions are
-limited to:
+GitHub Actions authenticates through OIDC. Its trust policy accepts only the
+immutable owner/repository identity for `TshephangMogotsi/FormForge` on
+`refs/heads/main`, and its permissions are limited to:
 
 - publishing images to the FormForge ECR repository;
 - creating or updating the ECS Express service;
