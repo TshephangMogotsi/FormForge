@@ -237,17 +237,11 @@ Resources:
                 Action:
                   - iam:PassRole
                 Resource: !GetAtt TaskExecutionRole.Arn
-                Condition:
-                  StringEquals:
-                    iam:PassedToService: ecs-tasks.amazonaws.com
               - Sid: PassExpressInfrastructureRole
                 Effect: Allow
                 Action:
                   - iam:PassRole
                 Resource: !GetAtt ExpressInfrastructureRole.Arn
-                Condition:
-                  StringEquals:
-                    iam:PassedToService: ecs.amazonaws.com
       Tags:
         - Key: Application
           Value: !Ref ApplicationName
