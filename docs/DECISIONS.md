@@ -120,3 +120,17 @@ Email delivery sits behind a notifier interface. Production uses Amazon SES
 through a narrowly scoped ECS application task role; tests use an in-memory
 notifier. Returning reset tokens in API responses or writing them to logs was
 rejected because either choice would bypass proof of email ownership.
+
+## ADR-015: Save bounded drafts as atomic documents
+
+Builder edits replace the complete embedded field array after a short client-side
+debounce. This keeps field ordering and related settings in one atomic MongoDB
+update, while stable UUIDs preserve field identity across reordering. The client
+shows pending, saving, saved, and retryable failure states; the server remains the
+authority for schema and ownership validation.
+
+Patch-per-field endpoints and collaborative merge logic were rejected for the MVP
+because there is one owner editing a bounded maximum of 50 fields. Concurrent tabs
+therefore use last-write-wins semantics. If measured usage requires collaborative
+or multi-device editing, the next step is optimistic concurrency with a draft
+revision—not premature real-time infrastructure.

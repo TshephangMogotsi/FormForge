@@ -1,4 +1,5 @@
 import { FormModel } from "./form.model.js";
+import type { FormField } from "./form.schemas.js";
 
 export type FormStatus = "draft" | "published";
 
@@ -7,13 +8,14 @@ export type FormRecord = {
   ownerId: string;
   title: string;
   description: string;
+  fields: FormField[];
   status: FormStatus;
   createdAt: Date;
   updatedAt: Date;
 };
 
-export type CreateFormRecord = Pick<FormRecord, "ownerId" | "title" | "description">;
-export type UpdateFormRecord = Partial<Pick<FormRecord, "title" | "description">>;
+export type CreateFormRecord = Pick<FormRecord, "ownerId" | "title" | "description" | "fields">;
+export type UpdateFormRecord = Partial<Pick<FormRecord, "title" | "description" | "fields">>;
 
 export type FormPage = {
   items: FormRecord[];
@@ -39,6 +41,7 @@ function toFormRecord(document: {
   ownerId: { toString(): string } | string;
   title: string;
   description: string;
+  fields: FormField[];
   status: FormStatus;
   createdAt: Date;
   updatedAt: Date;
@@ -48,6 +51,15 @@ function toFormRecord(document: {
     ownerId: document.ownerId.toString(),
     title: document.title,
     description: document.description,
+    fields: document.fields.map((field) => ({
+      id: field.id,
+      type: field.type,
+      label: field.label,
+      description: field.description,
+      placeholder: field.placeholder,
+      required: field.required,
+      options: [...field.options]
+    })),
     status: document.status,
     createdAt: document.createdAt,
     updatedAt: document.updatedAt

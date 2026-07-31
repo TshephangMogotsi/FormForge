@@ -5,11 +5,24 @@ export type User = {
   createdAt: string;
 };
 
+export type FormFieldType = "shortText" | "longText" | "number" | "select" | "checkbox";
+
+export type FormField = {
+  id: string;
+  type: FormFieldType;
+  label: string;
+  description: string;
+  placeholder: string;
+  required: boolean;
+  options: string[];
+};
+
 export type FormSummary = {
   id: string;
   ownerId: string;
   title: string;
   description: string;
+  fields: FormField[];
   status: "draft" | "published";
   createdAt: string;
   updatedAt: string;
@@ -126,6 +139,27 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input)
     });
+    return response.data.form;
+  },
+
+  async getForm(formId: string) {
+    const response = await apiRequest<{ data: { form: FormSummary } }>(
+      `/api/v1/forms/${formId}`
+    );
+    return response.data.form;
+  },
+
+  async updateForm(
+    formId: string,
+    input: Partial<Pick<FormSummary, "title" | "description" | "fields">>
+  ) {
+    const response = await apiRequest<{ data: { form: FormSummary } }>(
+      `/api/v1/forms/${formId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(input)
+      }
+    );
     return response.data.form;
   }
 };

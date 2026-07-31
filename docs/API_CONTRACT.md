@@ -65,6 +65,31 @@ Example create request:
 }
 ```
 
+Draft fields are embedded in the form and replaced atomically through `PATCH`.
+Each field has a stable client-generated UUID and one of `shortText`, `longText`,
+`number`, `select`, or `checkbox`. A form is limited to 50 fields and a dropdown
+to 20 non-empty options.
+
+Example draft update:
+
+```json
+{
+  "title": "Customer feedback",
+  "description": "A two-minute customer research survey.",
+  "fields": [
+    {
+      "id": "b3b2c1d0-7a6f-4f52-91af-2f2a5cf56e21",
+      "type": "select",
+      "label": "How satisfied are you?",
+      "description": "Choose the answer that fits best.",
+      "placeholder": "Select one",
+      "required": true,
+      "options": ["Very satisfied", "Satisfied", "Not satisfied"]
+    }
+  ]
+}
+```
+
 ## Planned routes
 
 - `POST /api/v1/forms/:formId/duplicate`

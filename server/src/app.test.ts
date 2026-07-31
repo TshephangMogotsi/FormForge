@@ -452,6 +452,7 @@ describe("FormForge API", () => {
     });
     expect(creation.status).toBe(201);
     expect(creation.body.data.form.status).toBe("draft");
+    expect(creation.body.data.form.fields).toEqual([]);
     const formId = creation.body.data.form.id as string;
 
     const list = await owner.get("/api/v1/forms");
@@ -465,14 +466,60 @@ describe("FormForge API", () => {
     });
 
     const update = await owner.patch(`/api/v1/forms/${formId}`).send({
-      title: "Quarterly customer feedback"
+      title: "Quarterly customer feedback",
+      fields: [
+        {
+          id: "b3b2c1d0-7a6f-4f52-91af-2f2a5cf56e21",
+          type: "select",
+          label: "How satisfied are you?",
+          description: "Choose the answer that fits best.",
+          placeholder: "Select one",
+          required: true,
+          options: ["Very satisfied", "Satisfied", "Not satisfied"]
+        }
+      ]
     });
     expect(update.status).toBe(200);
     expect(update.body.data.form.title).toBe("Quarterly customer feedback");
+    expect(update.body.data.form.fields).toEqual([
+      expect.objectContaining({
+        id: "b3b2c1d0-7a6f-4f52-91af-2f2a5cf56e21",
+        type: "select",
+        options: ["Very satisfied", "Satisfied", "Not satisfied"]
+      })
+    ]);
+
+    const read = await owner.get(`/api/v1/forms/${formId}`);
+    expect(read.body.data.form.fields).toEqual(update.body.data.form.fields);
 
     const deletion = await owner.delete(`/api/v1/forms/${formId}`);
     expect(deletion.status).toBe(204);
     expect((await owner.get("/api/v1/forms")).body.data.forms).toHaveLength(0);
+  });
+
+  it("rejects malformed draft field schemas before persistence", async () => {
+    const owner = request.agent(app);
+    await register(owner, "owner@example.com");
+    const creation = await owner.post("/api/v1/forms").send({ title: "Validated form" });
+    const formId = creation.body.data.form.id as string;
+
+    const invalidUpdate = await owner.patch(`/api/v1/forms/${formId}`).send({
+      fields: [
+        {
+          id: "not-a-uuid",
+          type: "select",
+          label: "Choose one",
+          description: "",
+          placeholder: "",
+          required: false,
+          options: []
+        }
+      ]
+    });
+
+    expect(invalidUpdate.status).toBe(400);
+    expect(invalidUpdate.body.error.code).toBe("VALIDATION_ERROR");
+    expect((await owner.get(`/api/v1/forms/${formId}`)).body.data.form.fields).toEqual([]);
   });
 
   it("hides another user's forms behind the ownership boundary", async () => {

@@ -52,6 +52,15 @@ flowchart LR
 3. Publishing copies the draft into an immutable, versioned snapshot.
 4. The public route reads only the published snapshot.
 
+### Draft editing
+
+1. The builder loads the owner-scoped form through the REST API.
+2. Dragging, ordering, and property edits remain immediate React interaction state.
+3. After a short idle period, the client sends the complete bounded draft to one
+   owner-scoped update endpoint and exposes pending, saving, saved, and failed states.
+4. Zod validates stable UUIDs, field types, lengths, option constraints, and the
+   maximum field count before MongoDB atomically replaces the embedded draft array.
+
 ### Submission
 
 1. The public client loads a published form by slug.
@@ -75,6 +84,8 @@ flowchart LR
   request-size limits, and security headers reduce common browser and API attacks.
 - Secrets stay in runtime configuration and never enter logs or source control.
 - Generated AI output and third-party responses are treated as untrusted input.
+- Builder validation in the browser improves feedback but never replaces the API's
+  authoritative validation of every persisted field definition.
 
 ## Production reference
 

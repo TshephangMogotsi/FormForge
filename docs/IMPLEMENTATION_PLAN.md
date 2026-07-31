@@ -20,10 +20,10 @@
 
 ## Phase 3 — Builder persistence
 
-- [ ] Persist draft field schemas.
-- [ ] Add debounced autosave with visible status.
-- [ ] Complete settings for all five field types.
-- [ ] Add preview mode.
+- [x] Persist draft field schemas.
+- [x] Add debounced autosave with visible status.
+- [x] Complete settings for all five field types.
+- [x] Add preview mode.
 
 ## Phase 4 — Publishing and submissions
 

@@ -285,7 +285,7 @@ export default function App() {
 
   return (
     <AppShell view={view} user={user} onNavigate={setView} onLogout={handleLogout}>
-      {view === "dashboard" ? (
+      {view === "dashboard" || !activeForm ? (
         <DashboardPage
           user={user}
           forms={forms}
@@ -300,8 +300,14 @@ export default function App() {
         />
       ) : (
         <BuilderPage
-          formTitle={activeForm?.title ?? "Untitled form"}
+          formId={activeForm.id}
           onBack={() => setView("dashboard")}
+          onSaved={(savedForm) => {
+            setActiveForm(savedForm);
+            setForms((current) =>
+              current.map((form) => (form.id === savedForm.id ? savedForm : form))
+            );
+          }}
         />
       )}
     </AppShell>

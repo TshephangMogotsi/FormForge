@@ -13,7 +13,8 @@ export class FormService {
     return this.forms.create({
       ownerId,
       title: input.title,
-      description: input.description
+      description: input.description,
+      fields: input.fields
     });
   }
 
