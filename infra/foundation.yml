@@ -46,13 +46,20 @@ Parameters:
     AllowedPattern: "^[A-Za-z0-9._-]+$"
     Description: GitHub environment allowed to deploy the production service.
 
-  PasswordResetSenderEmail:
+  PasswordResetSesIdentity:
     Type: String
     Default: ""
-    Description: Verified Amazon SES identity used to send password-reset emails.
+    Description: Verified Amazon SES email or domain identity used to send password-reset emails.
+
+  PasswordResetFromAddress:
+    Type: String
+    Default: ""
+    Description: Exact From address the application is allowed to use for password-reset emails.
 
 Conditions:
-  HasPasswordResetSender: !Not [!Equals [!Ref PasswordResetSenderEmail, ""]]
+  HasPasswordResetEmailConfiguration: !And
+    - !Not [!Equals [!Ref PasswordResetSesIdentity, ""]]
+    - !Not [!Equals [!Ref PasswordResetFromAddress, ""]]
 
 Resources:
   ApplicationCluster:
@@ -173,7 +180,7 @@ Resources:
             Action: sts:AssumeRole
       Policies:
         - !If
-          - HasPasswordResetSender
+          - HasPasswordResetEmailConfiguration
           - PolicyName: SendPasswordResetEmail
             PolicyDocument:
               Version: "2012-10-17"
@@ -182,7 +189,10 @@ Resources:
                   Effect: Allow
                   Action:
                     - ses:SendEmail
-                  Resource: !Sub "arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${PasswordResetSenderEmail}"
+                  Resource: !Sub "arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${PasswordResetSesIdentity}"
+                  Condition:
+                    StringEquals:
+                      ses:FromAddress: !Ref PasswordResetFromAddress
           - !Ref AWS::NoValue
       Tags:
         - Key: Application

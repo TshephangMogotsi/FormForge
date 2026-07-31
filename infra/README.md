@@ -61,8 +61,11 @@ parameters below `/formforge/production/`.
 
 The verified Amazon SES sender belongs in
 `/formforge/production/password-reset-from-email`. Deploy the foundation with
-the same value in the `PasswordResetSenderEmail` parameter so the application
-task role can send only from that identity.
+its verified email or domain identity in the `PasswordResetSesIdentity`
+parameter so the application task role can send only through that identity.
+When SES verifies a domain, the parameter is the domain while the runtime
+sender can be an address beneath it. Pass that exact runtime sender in
+`PasswordResetFromAddress`; IAM rejects any other From address.
 
 Amazon SES sandbox accounts can deliver only to verified recipients. Request
 production access before enabling password recovery for general public users.

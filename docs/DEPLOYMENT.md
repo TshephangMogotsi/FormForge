@@ -55,8 +55,12 @@ repository or GitHub.
 
 The verified Amazon SES sender is supplied from
 `/formforge/production/password-reset-from-email`. The application task role
-can send only from that SES identity; the task execution role reads the
-configuration value without exposing it in the container definition.
+can send only through the `PasswordResetSesIdentity` email or domain identity;
+the task execution role reads the sender address without exposing it in the
+container definition. A domain identity may authorize a sender address beneath
+that domain, such as `no-reply@formforge.example.com`. The
+`PasswordResetFromAddress` IAM condition restricts sending to that exact
+address.
 
 New SES accounts begin in the sandbox. While sandboxed, reset messages can be
 sent only to verified recipient identities. Request SES production access
