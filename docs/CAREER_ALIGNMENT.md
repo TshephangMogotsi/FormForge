@@ -12,7 +12,7 @@ reviewable proof of sound engineering decisions.
 | Third-party integrations | Provider adapters with timeouts, validation, and safe failure modes |
 | AWS awareness | Documented ECS/EC2, IAM, CloudWatch, secrets, and Atlas reference deployment |
 | Git and review practices | Focused commits, natural messages, documented verification |
-| Docker and CI/CD | Planned repeatable local stack, container build, and automated quality gates |
+| Docker and CI/CD | Immutable containers, automated quality gates, OIDC publication, manual production deployment, and smoke testing |
 | Automated testing | API integration tests plus security-focused cases |
 | Technical documentation | Product spec, API contract, ADRs, architecture diagrams, and runbook |
 | AI API integration | Optional provider-neutral form generation after the core workflow |
@@ -31,9 +31,7 @@ reviewable proof of sound engineering decisions.
 
 ## Evidence still to produce
 
-- A deployed demo and concise architecture walkthrough.
 - Measured bundle, mobile, and API performance.
-- CI output and container instructions.
 - OpenAPI documentation.
 - A short technical problem narrative describing an end-to-end decision,
   implementation, failure, and lesson learned.

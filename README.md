@@ -1,36 +1,120 @@
 # FormForge
 
-FormForge is a MERN form builder for creating, publishing, and analyzing dynamic forms.
+[![Verify and publish](https://github.com/TshephangMogotsi/FormForge/actions/workflows/delivery.yml/badge.svg)](https://github.com/TshephangMogotsi/FormForge/actions/workflows/delivery.yml)
+[![Live application](https://img.shields.io/badge/live-formforge.valiantmedia.co.bw-176b4d)](https://formforge.valiantmedia.co.bw)
 
-**Live application:** [formforge.valiantmedia.co.bw](https://formforge.valiantmedia.co.bw)
+FormForge is a production-deployed MERN form builder for creating, publishing,
+collecting, and analyzing dynamic forms. It is built as a portfolio-quality
+system: the repository records the API contracts, security boundaries,
+architecture decisions, automated checks, and delivery path—not only the UI.
 
-**Public demo form:** [Customer experience pulse](https://formforge.valiantmedia.co.bw/f/customer-experience-pulse-b408a7eb)
+- **Live application:** [formforge.valiantmedia.co.bw](https://formforge.valiantmedia.co.bw)
+- **Public demo:** [Customer experience pulse](https://formforge.valiantmedia.co.bw/f/customer-experience-pulse-b408a7eb)
+- **Deployment history:** [GitHub Actions](https://github.com/TshephangMogotsi/FormForge/actions)
 
-## Current milestone
+## What it demonstrates
 
-The repository currently includes:
+- A responsive React form builder with drag-and-drop ordering and autosave.
+- Immutable, versioned publishing behind stable public form links.
+- Public submissions independently revalidated by the Express API.
+- Paginated, version-aware response review and MongoDB-backed analytics.
+- Registration, login, logout, session restoration, and password recovery.
+- Revocable server-side sessions and single-use reset tokens stored as hashes.
+- Amazon SES email delivery behind a provider-neutral notifier boundary.
+- Docker delivery to AWS ECS Express Mode through short-lived GitHub OIDC credentials.
+- A branded TLS endpoint through a narrowly scoped Cloudflare Worker route.
 
-- A persistent React form builder with drag-and-drop ordering and autosave.
-- Immutable versioned publishing and lightweight public form pages.
-- Server-validated submissions, paginated response review, and basic analytics.
-- Registration, login, logout, and session restoration.
-- Revocable Mongo-backed sessions using HTTP-only cookies.
-- Protected form CRUD with server-enforced ownership.
-- A dashboard backed by live API form data.
-- Zod request validation, structured request logs, and correlation IDs.
-- Integration tests for authentication and cross-user isolation.
-- Project specifications, API contracts, and architecture decisions.
+## Architecture
+
+```mermaid
+flowchart LR
+    Owner["Form owner"] --> Edge["Cloudflare DNS, TLS, and hostname adapter"]
+    Respondent["Respondent"] --> Edge
+    Edge --> Gateway["ECS Express gateway"]
+    Gateway --> App["Node.js container"]
+    App --> React["React application"]
+    App --> API["Express REST API"]
+    API --> Atlas["MongoDB Atlas"]
+    API --> SES["Amazon SES"]
+    App --> Logs["CloudWatch logs and alarms"]
+    SSM["SSM Parameter Store"] --> App
+    Actions["GitHub Actions + AWS OIDC"] --> ECR["Private ECR"]
+    ECR --> Gateway
+```
+
+React and Express ship in one container and share one origin. The browser never
+acts as the authorization boundary: the API validates every write, scopes owner
+queries by authenticated user, and exposes public data only from an immutable
+published snapshot. Submissions live in their own collection because their
+growth and query patterns are unbounded relative to form definitions.
+
+See [the architecture document](docs/ARCHITECTURE.md) for publishing,
+submission, authentication, analytics, and scaling flows.
+
+## Major engineering decisions
+
+| Decision | Reason |
+| --- | --- |
+| Start with a modular monolith | One deployable unit keeps delivery and observability simple while domain modules preserve extraction boundaries. |
+| Serve React and Express from one origin | HTTP-only session cookies work without cross-origin credential complexity. |
+| Publish immutable form versions | Editing a draft cannot silently change an active public form or invalidate the meaning of older responses. |
+| Advance a live-version pointer transactionally | A published snapshot and its public pointer cannot diverge during partial failure. |
+| Store submissions separately | Response volume is unbounded and needs independent indexes, pagination, retention, and analytics. |
+| Hash session and reset tokens | A database leak does not reveal bearer credentials; logout and password reset can revoke sessions server-side. |
+| Aggregate analytics at read time first | Indexed MongoDB pipelines meet current volume without premature counters, queues, and reconciliation jobs. |
+| Build once and deploy by commit SHA | Production receives the exact container that passed type-checking, tests, and the build gate. |
+| Use OIDC instead of AWS access keys | GitHub receives short-lived, repository-scoped credentials without storing long-lived cloud secrets. |
+| Adapt the hostname at the existing edge | A scoped Cloudflare Worker preserves the branded TLS origin without moving the existing DNS zone or adding a second CDN. |
+
+The complete decision record, including rejected alternatives, is in
+[docs/DECISIONS.md](docs/DECISIONS.md).
+
+## Stack
+
+| Layer | Technology |
+| --- | --- |
+| Client | React, TypeScript, Vite, dnd-kit |
+| API | Node.js, Express, TypeScript, Zod |
+| Data | MongoDB Atlas, Mongoose |
+| Authentication | Opaque HTTP-only cookies, hashed MongoDB sessions |
+| Email | Amazon SES |
+| Delivery | Docker, GitHub Actions, AWS OIDC, ECR, ECS Express Mode |
+| Edge | Cloudflare DNS, TLS, and Worker route |
+| Verification | TypeScript compiler, Vitest integration tests, production builds |
 
 ## Local setup
 
-1. Copy `.env.example` to `.env`.
-2. Run `npm install`.
-3. Run `npm run dev`.
-4. Open `http://localhost:5173`.
+### Prerequisites
 
-The API runs on `http://localhost:4000`.
+- Node.js `22.12` or newer, below Node.js 25.
+- npm.
+- MongoDB Atlas or another MongoDB deployment. Publishing uses transactions, so
+  a replica set is required to exercise the full workflow.
 
-## Verification
+### Run the application
+
+```bash
+git clone https://github.com/TshephangMogotsi/FormForge.git
+cd FormForge
+npm ci
+cp .env.example .env
+npm run dev
+```
+
+Set `MONGODB_URI` in `.env` before starting. Keep credentials out of source
+control; `.env` is ignored. The default development endpoints are:
+
+- React: `http://localhost:5173`
+- API: `http://localhost:4000`
+- Health: `http://localhost:4000/api/health`
+
+`CLIENT_ORIGIN` and `PUBLIC_APP_ORIGIN` should remain
+`http://localhost:5173` locally. Password-reset delivery is optional during
+development and requires a verified SES sender in `PASSWORD_RESET_FROM_EMAIL`.
+
+## Test and build status
+
+Every pull request and push to `main` runs the same locked verification sequence:
 
 ```bash
 npm run typecheck
@@ -38,37 +122,65 @@ npm test
 npm run build
 ```
 
-See `docs/IMPLEMENTATION_PLAN.md` for the delivery roadmap.
+| Check | Current coverage |
+| --- | --- |
+| Type checking | Client and server TypeScript workspaces |
+| Integration tests | 17 API tests covering auth, isolation, drafts, publishing, submissions, and analytics |
+| Production build | Compiled Express server and code-split Vite client |
+| Container publication | Immutable `sha-<commit>` images in GHCR and private ECR |
+| Production smoke test | External `/api/health` check after ECS service stabilization |
+
+The badge at the top reflects the latest `main` verification result.
+
+## Deployment flow
+
+```mermaid
+flowchart LR
+    Commit["Push or pull request"] --> Verify["Type-check, test, build"]
+    Verify --> Image["Build container once"]
+    Image --> GHCR["Publish SHA image to GHCR"]
+    GHCR --> ECR["Copy verified SHA to private ECR"]
+    ECR --> Gate["Manual production gate"]
+    Gate --> ECS["Canary deployment to ECS Express"]
+    ECS --> Health["Service stability and health smoke test"]
+    Health --> Edge["formforge.valiantmedia.co.bw"]
+```
+
+The production workflow selects an existing immutable ECR image rather than
+rebuilding source. AWS access is assumed through GitHub OIDC, runtime secrets
+are resolved from SSM Parameter Store, and rollback means deploying the previous
+known-good SHA. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for IAM boundaries,
+configuration, launch gates, and rollback strategy.
 
 ## Demo data
 
-The optional seeder creates a dedicated demo user, publishes a realistic customer
-experience form, and adds 24 responses across the last seven days. It is idempotent
-for the configured account and never logs the password. For an existing account,
-only `DEMO_USER_EMAIL` is required.
+The optional idempotent seeder publishes a realistic customer-experience form
+and creates 24 responses across seven days. For an existing account, only the
+email is required.
 
 ```bash
-DEMO_USER_EMAIL=demo@example.com \
-DEMO_USER_PASSWORD='choose-a-private-password' \
-npm run seed:demo --workspace server
+DEMO_USER_EMAIL=demo@example.com npm run seed:demo --workspace server
 ```
 
-## Delivery
+Creating a new demo account also requires `DEMO_USER_PASSWORD` with at least
+eight characters. Never commit that value.
 
-The production build ships the React client and Express API as one same-origin
-container. GitHub Actions verifies pull requests and publishes successful
-`main` builds as versioned images. See `docs/DEPLOYMENT.md` for runtime
-configuration, launch gates, and rollback strategy.
+## Repository map
 
-## Engineering evidence
+```text
+client/          React owner application and public form runtime
+server/          Express API, domain services, repositories, and tests
+infra/           Reviewable AWS IAM and registry foundation
+docs/            Contracts, architecture, ADRs, roadmap, and runbooks
+.github/         Verification, image publication, and production workflows
+```
 
-FormForge is intentionally developed as a portfolio-quality system rather than
-a UI-only demo. The repository records:
+## Further documentation
 
-- Product scope and non-functional requirements.
-- API and security boundaries.
-- Architecture decisions and rejected alternatives.
-- A phased implementation and verification plan.
-- How the project demonstrates skills expected in mid-level MERN roles.
-
-Start with `docs/ARCHITECTURE.md` and `docs/CAREER_ALIGNMENT.md`.
+- [Architecture](docs/ARCHITECTURE.md)
+- [API contract](docs/API_CONTRACT.md)
+- [Engineering decisions](docs/DECISIONS.md)
+- [Deployment and operations](docs/DEPLOYMENT.md)
+- [Product specification](docs/PRODUCT_SPEC.md)
+- [Career alignment](docs/CAREER_ALIGNMENT.md)
+- [Implementation roadmap](docs/IMPLEMENTATION_PLAN.md)
