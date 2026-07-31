@@ -35,6 +35,13 @@ npm run build
 
 See `docs/IMPLEMENTATION_PLAN.md` for the delivery roadmap.
 
+## Delivery
+
+The production build ships the React client and Express API as one same-origin
+container. GitHub Actions verifies pull requests and publishes successful
+`main` builds as versioned images. See `docs/DEPLOYMENT.md` for runtime
+configuration, launch gates, and rollback strategy.
+
 ## Engineering evidence
 
 FormForge is intentionally developed as a portfolio-quality system rather than

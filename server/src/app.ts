@@ -3,6 +3,8 @@ import cors from "cors";
 import express from "express";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { env } from "./config/env.js";
 import { createAuthRouter } from "./features/auth/auth.routes.js";
 import { AuthService } from "./features/auth/auth.service.js";
@@ -21,6 +23,8 @@ export type AppServices = {
   forms: FormService;
 };
 
+const clientDistPath = fileURLToPath(new URL("../../client/dist", import.meta.url));
+
 function createDefaultServices(): AppServices {
   return {
     auth: new AuthService(
@@ -35,6 +39,10 @@ export function createApp(services = createDefaultServices()) {
   const app = express();
 
   app.disable("x-powered-by");
+  if (env.NODE_ENV === "production") {
+    app.set("trust proxy", 1);
+  }
+
   app.use(helmet());
   app.use(
     cors({
@@ -58,6 +66,29 @@ export function createApp(services = createDefaultServices()) {
   app.use("/api/health", healthRouter);
   app.use("/api/v1/auth", createAuthRouter(services.auth));
   app.use("/api/v1/forms", createFormRouter(services.auth, services.forms));
+
+  if (env.NODE_ENV === "production") {
+    app.use(
+      express.static(clientDistPath, {
+        index: false,
+        maxAge: "1h"
+      })
+    );
+    app.use((request, response, next) => {
+      const isClientNavigation =
+        request.method === "GET" &&
+        !request.path.startsWith("/api/") &&
+        Boolean(request.accepts("html"));
+
+      if (!isClientNavigation) {
+        next();
+        return;
+      }
+
+      response.sendFile(path.join(clientDistPath, "index.html"));
+    });
+  }
+
   app.use(notFoundHandler);
   app.use(errorHandler);
 

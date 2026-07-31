@@ -87,6 +87,12 @@ flowchart TB
     Secrets["Managed secrets"] --> Service
 ```
 
+The React application and Express API are packaged in the same container and
+served from one public origin. GitHub Actions verifies every proposed change
+and publishes successful `main` builds to GitHub Container Registry with an
+immutable commit-SHA tag. The host deploys that exact artifact rather than
+rebuilding source independently.
+
 AWS ECS is the preferred reference deployment when container orchestration is
 worth the operational cost; EC2 is an acceptable simpler alternative. Lambda
 and API Gateway are not introduced merely to list services on a résumé.

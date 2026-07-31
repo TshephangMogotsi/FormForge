@@ -58,3 +58,15 @@ server-side revocation, and deletion of expired sessions without placing user
 claims in browser-readable storage. Stateless JWT cookies were rejected for
 this MVP because immediate revocation would require an additional deny-list or
 short refresh-token workflow.
+
+## ADR-011: Deliver one immutable container through GitHub Actions
+
+The production build packages the React client and Express API into one
+container, preserving the same-origin boundary from ADR-005. Pull requests and
+pushes are type-checked, tested, and built before a successful `main` build is
+published to GitHub Container Registry with a commit-SHA tag. A deploy target
+can promote or roll back an already-verified image without rebuilding it.
+
+Separate client and API deployments were rejected for the initial launch
+because they add cross-origin cookie configuration, coordinated releases, and
+another operational surface without providing a current scaling benefit.
