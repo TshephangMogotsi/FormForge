@@ -48,6 +48,25 @@ export type SubmissionRecord = {
   createdAt: Date;
 };
 
+export type SubmissionPage = {
+  items: SubmissionRecord[];
+  versions: Array<{
+    version: number;
+    fields: FormField[];
+    publishedAt: Date;
+  }>;
+  page: number;
+  limit: number;
+  total: number;
+};
+
+export type SubmissionAnalyticsCounts = {
+  total: number;
+  sinceTotal: number;
+  trend: Array<{ date: string; count: number }>;
+  options: Array<{ fieldId: string; value: string; count: number }>;
+};
+
 export interface FormRepository {
   create(input: CreateFormRecord): Promise<FormRecord>;
   listByOwner(ownerId: string, page: number, limit: number): Promise<FormPage>;
@@ -67,6 +86,12 @@ export interface FormRepository {
     formVersion: number;
     answers: SubmissionAnswer[];
   }): Promise<SubmissionRecord>;
+  listSubmissions(formId: string, page: number, limit: number): Promise<SubmissionPage>;
+  getSubmissionAnalytics(
+    formId: string,
+    since: Date,
+    selectFieldIds: string[]
+  ): Promise<SubmissionAnalyticsCounts>;
   deleteByOwnerAndId(ownerId: string, formId: string): Promise<boolean>;
 }
 
@@ -253,6 +278,101 @@ export class MongooseFormRepository implements FormRepository {
         value: answer.value
       })),
       createdAt: submission.createdAt
+    };
+  }
+
+  async listSubmissions(formId: string, page: number, limit: number): Promise<SubmissionPage> {
+    const filter = { formId };
+    const [submissions, total] = await Promise.all([
+      SubmissionModel.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .exec(),
+      SubmissionModel.countDocuments(filter).exec()
+    ]);
+    const versionNumbers = [...new Set(submissions.map((submission) => submission.formVersion))];
+    const versions = versionNumbers.length
+      ? await PublishedFormModel.find({ formId, version: { $in: versionNumbers } })
+          .sort({ version: -1 })
+          .exec()
+      : [];
+
+    return {
+      items: submissions.map((submission) => ({
+        id: submission.id,
+        formId: submission.formId.toString(),
+        formVersion: submission.formVersion,
+        answers: submission.answers.map((answer) => ({
+          fieldId: answer.fieldId,
+          value: answer.value
+        })),
+        createdAt: submission.createdAt
+      })),
+      versions: versions.map((version) => ({
+        version: version.version,
+        fields: cloneFields(version.fields),
+        publishedAt: version.publishedAt
+      })),
+      page,
+      limit,
+      total
+    };
+  }
+
+  async getSubmissionAnalytics(
+    formId: string,
+    since: Date,
+    selectFieldIds: string[]
+  ): Promise<SubmissionAnalyticsCounts> {
+    const objectId = new mongoose.Types.ObjectId(formId);
+    const [total, sinceTotal, trendRows, optionRows] = await Promise.all([
+      SubmissionModel.countDocuments({ formId: objectId }).exec(),
+      SubmissionModel.countDocuments({ formId: objectId, createdAt: { $gte: since } }).exec(),
+      SubmissionModel.aggregate<{ _id: string; count: number }>([
+        { $match: { formId: objectId, createdAt: { $gte: since } } },
+        {
+          $group: {
+            _id: {
+              $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: "UTC" }
+            },
+            count: { $sum: 1 }
+          }
+        },
+        { $sort: { _id: 1 } }
+      ]).exec(),
+      selectFieldIds.length
+        ? SubmissionModel.aggregate<{
+            _id: { fieldId: string; value: string };
+            count: number;
+          }>([
+            { $match: { formId: objectId } },
+            { $unwind: "$answers" },
+            {
+              $match: {
+                "answers.fieldId": { $in: selectFieldIds },
+                "answers.value": { $type: "string" }
+              }
+            },
+            {
+              $group: {
+                _id: { fieldId: "$answers.fieldId", value: "$answers.value" },
+                count: { $sum: 1 }
+              }
+            }
+          ]).exec()
+        : Promise.resolve([])
+    ]);
+
+    return {
+      total,
+      sinceTotal,
+      trend: trendRows.map((row) => ({ date: row._id, count: row.count })),
+      options: optionRows.map((row) => ({
+        fieldId: row._id.fieldId,
+        value: row._id.value,
+        count: row.count
+      }))
     };
   }
 

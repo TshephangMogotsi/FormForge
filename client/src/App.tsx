@@ -20,12 +20,15 @@ const BuilderPage = lazy(() =>
 const PublicFormPage = lazy(() =>
   import("./features/public/PublicFormPage").then((module) => ({ default: module.PublicFormPage }))
 );
+const ResponsesPage = lazy(() =>
+  import("./features/responses/ResponsesPage").then((module) => ({ default: module.ResponsesPage }))
+);
 
 const publicFormSlug = window.location.pathname.match(
   /^\/f\/([a-z0-9]+(?:-[a-z0-9]+)*)\/?$/
 )?.[1] ?? null;
 
-type View = "dashboard" | "builder";
+type View = "dashboard" | "builder" | "responses";
 
 function initials(name: string) {
   return name
@@ -41,13 +44,15 @@ function AppShell({
   view,
   user,
   onNavigate,
-  onLogout
+  onLogout,
+  hasActiveForm
 }: {
   children: React.ReactNode;
   view: View;
   user: User;
   onNavigate: (view: View) => void;
   onLogout: () => void;
+  hasActiveForm: boolean;
 }) {
   const isBuilder = view === "builder";
 
@@ -63,7 +68,7 @@ function AppShell({
 
         <nav className="nav-list" aria-label="Primary navigation">
           <button
-            className={!isBuilder ? "nav-item active button-reset" : "nav-item button-reset"}
+            className={view === "dashboard" ? "nav-item active button-reset" : "nav-item button-reset"}
             type="button"
             onClick={() => onNavigate("dashboard")}
           >
@@ -78,11 +83,15 @@ function AppShell({
             <FileText size={18} />
             Forms
           </button>
-          <span className="nav-item muted">
+          <button
+            className={view === "responses" ? "nav-item active button-reset" : "nav-item button-reset"}
+            type="button"
+            disabled={!hasActiveForm}
+            onClick={() => onNavigate("responses")}
+          >
             <BarChart3 size={18} />
             Analytics
-            <span className="soon">Soon</span>
-          </span>
+          </button>
         </nav>
 
         <div className="sidebar-footer">
@@ -151,9 +160,9 @@ function DashboardPage({
           <small>{forms.length ? "Across drafts and published forms" : "Your first form starts here"}</small>
         </article>
         <article className="metric-card">
-          <span className="metric-label">Responses</span>
-          <strong>0</strong>
-          <small>Across all published forms</small>
+          <span className="metric-label">Published forms</span>
+          <strong>{forms.filter((form) => form.status === "published").length}</strong>
+          <small>Live and ready to collect responses</small>
         </article>
         <article className="metric-card accent-card">
           <span className="sparkle-badge">
@@ -302,7 +311,13 @@ export default function App() {
   }
 
   return (
-    <AppShell view={view} user={user} onNavigate={setView} onLogout={handleLogout}>
+    <AppShell
+      view={view}
+      user={user}
+      onNavigate={setView}
+      onLogout={handleLogout}
+      hasActiveForm={Boolean(activeForm)}
+    >
       {view === "dashboard" || !activeForm ? (
         <DashboardPage
           user={user}
@@ -316,17 +331,26 @@ export default function App() {
             setView("builder");
           }}
         />
-      ) : (
+      ) : view === "builder" ? (
         <Suspense fallback={<AppLoading />}>
           <BuilderPage
             formId={activeForm.id}
             onBack={() => setView("dashboard")}
+            onOpenResponses={() => setView("responses")}
             onSaved={(savedForm) => {
               setActiveForm(savedForm);
               setForms((current) =>
                 current.map((form) => (form.id === savedForm.id ? savedForm : form))
               );
             }}
+          />
+        </Suspense>
+      ) : (
+        <Suspense fallback={<AppLoading />}>
+          <ResponsesPage
+            form={activeForm}
+            onBack={() => setView("dashboard")}
+            onEdit={() => setView("builder")}
           />
         </Suspense>
       )}

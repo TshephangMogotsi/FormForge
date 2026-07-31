@@ -6,8 +6,9 @@ FormForge is a MERN form builder for creating, publishing, and analyzing dynamic
 
 The repository currently includes:
 
-- A React form-builder shell with drag-and-drop field ordering.
-- Editable field properties.
+- A persistent React form builder with drag-and-drop ordering and autosave.
+- Immutable versioned publishing and lightweight public form pages.
+- Server-validated submissions, paginated response review, and basic analytics.
 - Registration, login, logout, and session restoration.
 - Revocable Mongo-backed sessions using HTTP-only cookies.
 - Protected form CRUD with server-enforced ownership.
@@ -34,6 +35,19 @@ npm run build
 ```
 
 See `docs/IMPLEMENTATION_PLAN.md` for the delivery roadmap.
+
+## Demo data
+
+The optional seeder creates a dedicated demo user, publishes a realistic customer
+experience form, and adds 24 responses across the last seven days. It is idempotent
+for the configured account and never logs the password. For an existing account,
+only `DEMO_USER_EMAIL` is required.
+
+```bash
+DEMO_USER_EMAIL=demo@example.com \
+DEMO_USER_PASSWORD='choose-a-private-password' \
+npm run seed:demo --workspace server
+```
 
 ## Delivery
 

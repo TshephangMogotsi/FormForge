@@ -76,6 +76,15 @@ snapshot mutation path, and a submission stores only its version reference and
 validated answers. Public submission writes have a tighter rate limit than the
 general API boundary.
 
+### Response review
+
+1. Owner-scoped response queries paginate newest-first and return only the published
+   field versions needed to label that page accurately.
+2. MongoDB aggregations calculate total responses, a seven-day UTC trend, and
+   dropdown counts without transferring every response into application memory.
+3. The service fills missing trend dates and calculates percentages so the client
+   receives a stable presentation-ready contract.
+
 ## Security boundaries
 
 - Authentication establishes identity; authorization is checked per resource.

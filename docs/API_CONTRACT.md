@@ -52,6 +52,8 @@ All form endpoints require authentication.
 - `GET /api/v1/forms/:formId`
 - `PATCH /api/v1/forms/:formId`
 - `POST /api/v1/forms/:formId/publish`
+- `GET /api/v1/forms/:formId/submissions?page=1&limit=10`
+- `GET /api/v1/forms/:formId/analytics`
 - `DELETE /api/v1/forms/:formId`
 
 List limits are bounded to 50. Read, update, and delete operations scope the
@@ -121,5 +123,3 @@ responses return only a submission ID, form version, and submission timestamp.
 ## Planned routes
 
 - `POST /api/v1/forms/:formId/duplicate`
-- `GET /api/v1/forms/:formId/submissions`
-- `GET /api/v1/forms/:formId/analytics`

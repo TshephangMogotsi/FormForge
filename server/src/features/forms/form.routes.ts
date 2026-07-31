@@ -6,6 +6,7 @@ import {
   createFormSchema,
   formIdSchema,
   listFormsQuerySchema,
+  listSubmissionsQuerySchema,
   updateFormSchema
 } from "./form.schemas.js";
 import type { FormService } from "./form.service.js";
@@ -40,6 +41,41 @@ export function createFormRouter(authService: AuthService, formService: FormServ
       const input = createFormSchema.parse(request.body);
       const form = await formService.create(request.auth!.userId, input);
       response.status(201).json({ data: { form } });
+    })
+  );
+
+  router.get(
+    "/:formId/submissions",
+    asyncHandler(async (request, response) => {
+      const formId = formIdSchema.parse(request.params.formId);
+      const { page, limit } = listSubmissionsQuerySchema.parse(request.query);
+      const result = await formService.listSubmissions(
+        request.auth!.userId,
+        formId,
+        page,
+        limit
+      );
+      response.json({
+        data: {
+          submissions: result.items,
+          versions: result.versions,
+          pagination: {
+            page: result.page,
+            limit: result.limit,
+            total: result.total,
+            pages: Math.ceil(result.total / result.limit)
+          }
+        }
+      });
+    })
+  );
+
+  router.get(
+    "/:formId/analytics",
+    asyncHandler(async (request, response) => {
+      const formId = formIdSchema.parse(request.params.formId);
+      const analytics = await formService.getAnalytics(request.auth!.userId, formId);
+      response.json({ data: { analytics } });
     })
   );
 

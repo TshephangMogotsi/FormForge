@@ -46,6 +46,26 @@ export type SubmissionAnswer = {
   value: string | number | boolean;
 };
 
+export type StoredSubmission = {
+  id: string;
+  formId: string;
+  formVersion: number;
+  answers: SubmissionAnswer[];
+  createdAt: string;
+};
+
+export type SubmissionAnalytics = {
+  totalResponses: number;
+  last7DaysResponses: number;
+  trend: Array<{ date: string; count: number }>;
+  distributions: Array<{
+    fieldId: string;
+    label: string;
+    answered: number;
+    options: Array<{ value: string; count: number; percentage: number }>;
+  }>;
+};
+
 type ApiErrorBody = {
   error?: {
     code?: string;
@@ -208,5 +228,23 @@ export const api = {
       body: JSON.stringify({ answers })
     });
     return response.data.submission;
+  },
+
+  async listSubmissions(formId: string, page = 1, limit = 10) {
+    const response = await apiRequest<{
+      data: {
+        submissions: StoredSubmission[];
+        versions: Array<{ version: number; fields: FormField[]; publishedAt: string }>;
+        pagination: { page: number; limit: number; total: number; pages: number };
+      };
+    }>(`/api/v1/forms/${formId}/submissions?page=${page}&limit=${limit}`);
+    return response.data;
+  },
+
+  async getFormAnalytics(formId: string) {
+    const response = await apiRequest<{ data: { analytics: SubmissionAnalytics } }>(
+      `/api/v1/forms/${formId}/analytics`
+    );
+    return response.data.analytics;
   }
 };

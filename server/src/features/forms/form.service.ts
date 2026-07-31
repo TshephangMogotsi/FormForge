@@ -14,6 +14,7 @@ import type {
   PublishedFormRecord,
   SubmissionRecord
 } from "./form.repository.js";
+import type { SubmissionPage } from "./form.repository.js";
 
 function createPublicSlug(title: string) {
   const prefix = title
@@ -159,6 +160,66 @@ export class FormService {
       formVersion: form.version,
       answers: normalizedAnswers
     });
+  }
+
+  async listSubmissions(
+    ownerId: string,
+    formId: string,
+    page: number,
+    limit: number
+  ): Promise<SubmissionPage> {
+    await this.get(ownerId, formId);
+    return this.forms.listSubmissions(formId, page, limit);
+  }
+
+  async getAnalytics(ownerId: string, formId: string) {
+    const form = await this.get(ownerId, formId);
+    const publication = form.slug ? await this.forms.findPublishedBySlug(form.slug) : null;
+    const selectFields = publication?.fields.filter((field) => field.type === "select") ?? [];
+    const today = new Date();
+    const todayUtc = new Date(
+      Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+    );
+    const since = new Date(todayUtc.getTime() - 6 * 24 * 60 * 60 * 1000);
+    const counts = await this.forms.getSubmissionAnalytics(
+      formId,
+      since,
+      selectFields.map((field) => field.id)
+    );
+    const trendByDate = new Map(counts.trend.map((entry) => [entry.date, entry.count]));
+    const trend = Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(since.getTime() + index * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10);
+      return { date, count: trendByDate.get(date) ?? 0 };
+    });
+
+    const distributions = selectFields.map((field) => {
+      const fieldCounts = counts.options.filter((entry) => entry.fieldId === field.id);
+      const observedValues = fieldCounts.map((entry) => entry.value);
+      const values = [...new Set([...field.options, ...observedValues])];
+      const answered = fieldCounts.reduce((sum, entry) => sum + entry.count, 0);
+      return {
+        fieldId: field.id,
+        label: field.label,
+        answered,
+        options: values.map((value) => {
+          const count = fieldCounts.find((entry) => entry.value === value)?.count ?? 0;
+          return {
+            value,
+            count,
+            percentage: answered ? Math.round((count / answered) * 100) : 0
+          };
+        })
+      };
+    });
+
+    return {
+      totalResponses: counts.total,
+      last7DaysResponses: counts.sinceTotal,
+      trend,
+      distributions
+    };
   }
 
   async delete(ownerId: string, formId: string): Promise<void> {

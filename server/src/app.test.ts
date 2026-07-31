@@ -27,6 +27,8 @@ import type {
   FormRecord,
   FormRepository,
   PublishedFormRecord,
+  SubmissionAnalyticsCounts,
+  SubmissionPage,
   SubmissionRecord,
   UpdateFormRecord
 } from "./features/forms/form.repository.js";
@@ -247,6 +249,64 @@ class InMemoryFormRepository implements FormRepository {
     this.nextSubmissionId += 1;
     this.submissions.push(submission);
     return submission;
+  }
+
+  async listSubmissions(formId: string, page: number, limit: number): Promise<SubmissionPage> {
+    const submissions = this.submissions
+      .filter((submission) => submission.formId === formId)
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+    const items = submissions.slice((page - 1) * limit, page * limit);
+    const versionNumbers = new Set(items.map((submission) => submission.formVersion));
+    return {
+      items,
+      versions: (this.publications.get(formId) ?? [])
+        .filter((publication) => versionNumbers.has(publication.version))
+        .map((publication) => ({
+          version: publication.version,
+          fields: structuredClone(publication.fields),
+          publishedAt: publication.publishedAt
+        })),
+      page,
+      limit,
+      total: submissions.length
+    };
+  }
+
+  async getSubmissionAnalytics(
+    formId: string,
+    since: Date,
+    selectFieldIds: string[]
+  ): Promise<SubmissionAnalyticsCounts> {
+    const submissions = this.submissions.filter((submission) => submission.formId === formId);
+    const recent = submissions.filter((submission) => submission.createdAt >= since);
+    const trendCounts = new Map<string, number>();
+    recent.forEach((submission) => {
+      const date = submission.createdAt.toISOString().slice(0, 10);
+      trendCounts.set(date, (trendCounts.get(date) ?? 0) + 1);
+    });
+    const optionCounts = new Map<string, number>();
+    submissions.forEach((submission) => {
+      submission.answers.forEach((answer) => {
+        if (selectFieldIds.includes(answer.fieldId) && typeof answer.value === "string") {
+          const key = `${answer.fieldId}::${answer.value}`;
+          optionCounts.set(key, (optionCounts.get(key) ?? 0) + 1);
+        }
+      });
+    });
+
+    return {
+      total: submissions.length,
+      sinceTotal: recent.length,
+      trend: [...trendCounts].map(([date, count]) => ({ date, count })),
+      options: [...optionCounts].map(([key, count]) => {
+        const separator = key.indexOf("::");
+        return {
+          fieldId: key.slice(0, separator),
+          value: key.slice(separator + 2),
+          count
+        };
+      })
+    };
   }
 }
 
@@ -667,6 +727,47 @@ describe("FormForge API", () => {
       submittedAt: expect.any(String)
     });
 
+    const responses = await owner.get(`/api/v1/forms/${formId}/submissions?page=1&limit=1`);
+    expect(responses.status).toBe(200);
+    expect(responses.body.data.pagination).toEqual({
+      page: 1,
+      limit: 1,
+      total: 1,
+      pages: 1
+    });
+    expect(responses.body.data.submissions[0]).toMatchObject({
+      formVersion: 2,
+      answers: expect.arrayContaining([
+        { fieldId: requiredFieldId, value: "Faster onboarding" },
+        { fieldId: selectFieldId, value: "Yes" }
+      ])
+    });
+    expect(responses.body.data.versions[0]).toMatchObject({ version: 2 });
+
+    const analytics = await owner.get(`/api/v1/forms/${formId}/analytics`);
+    expect(analytics.status).toBe(200);
+    expect(analytics.body.data.analytics).toMatchObject({
+      totalResponses: 1,
+      last7DaysResponses: 1,
+      distributions: [
+        {
+          fieldId: selectFieldId,
+          label: "Would you recommend us?",
+          answered: 1,
+          options: expect.arrayContaining([
+            { value: "Yes", count: 1, percentage: 100 },
+            { value: "No", count: 0, percentage: 0 }
+          ])
+        }
+      ]
+    });
+    expect(
+      analytics.body.data.analytics.trend.reduce(
+        (sum: number, point: { count: number }) => sum + point.count,
+        0
+      )
+    ).toBe(1);
+
     const invalidSubmission = await request(app)
       .post(`/api/v1/public/forms/${slug}/submissions`)
       .send({ answers: [{ fieldId: selectFieldId, value: "Maybe" }] });
@@ -710,8 +811,10 @@ describe("FormForge API", () => {
       .send({ title: "Hijacked" });
     const deletion = await outsider.delete(`/api/v1/forms/${formId}`);
     const publish = await outsider.post(`/api/v1/forms/${formId}/publish`);
+    const responses = await outsider.get(`/api/v1/forms/${formId}/submissions`);
+    const analytics = await outsider.get(`/api/v1/forms/${formId}/analytics`);
 
-    for (const response of [read, update, deletion, publish]) {
+    for (const response of [read, update, deletion, publish, responses, analytics]) {
       expect(response.status).toBe(404);
       expect(response.body.error.code).toBe("FORM_NOT_FOUND");
     }

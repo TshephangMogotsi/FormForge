@@ -159,3 +159,16 @@ Submission content is not returned from the write endpoint or included in logs.
 Embedding submissions inside forms was rejected because response counts are
 unbounded and have different pagination and analytics access patterns. Trusting only
 browser validation was rejected because public callers can bypass the client.
+
+## ADR-018: Aggregate response analytics at read time for the MVP
+
+The owner analytics endpoint uses indexed MongoDB counts and aggregation pipelines
+for seven-day trends and dropdown distributions. It returns a small stable contract,
+while paginated response reads include only the published versions needed to label
+the current page. This avoids transferring the full response collection or trusting
+the browser to compute business metrics.
+
+Precomputed counters and an analytics worker were rejected at the current volume
+because they add write coordination, retry behavior, and reconciliation work without
+a measured latency problem. The documented scaling path is to pre-aggregate when
+observed response volume makes read-time aggregation too slow.

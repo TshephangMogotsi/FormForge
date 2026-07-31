@@ -19,6 +19,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+  BarChart3,
   CheckSquare,
   ChevronLeft,
   ClipboardCheck,
@@ -358,10 +359,12 @@ function saveStateLabel(saveState: SaveState) {
 export function BuilderPage({
   formId,
   onBack,
+  onOpenResponses,
   onSaved
 }: {
   formId: string;
   onBack: () => void;
+  onOpenResponses: () => void;
   onSaved: (form: FormSummary) => void;
 }) {
   const [title, setTitle] = useState("");
@@ -600,6 +603,11 @@ export function BuilderPage({
             </div>
           </div>
           <div className="builder-actions">
+            {publishedVersion > 0 && (
+              <button className="secondary-button" type="button" onClick={onOpenResponses}>
+                <BarChart3 size={17} /> Responses
+              </button>
+            )}
             <button className="secondary-button" type="button" onClick={() => setPreviewing((current) => !current)}>
               {previewing ? <Pencil size={17} /> : <Eye size={17} />}
               {previewing ? "Edit" : "Preview"}

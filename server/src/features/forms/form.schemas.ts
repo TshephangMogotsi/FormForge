@@ -126,6 +126,8 @@ export const listFormsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(20)
 });
 
+export const listSubmissionsQuerySchema = listFormsQuerySchema;
+
 export type CreateFormInput = z.infer<typeof createFormSchema>;
 export type UpdateFormInput = z.infer<typeof updateFormSchema>;
 export type FormField = z.infer<typeof formFieldSchema>;
