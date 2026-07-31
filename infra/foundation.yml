@@ -41,6 +41,16 @@ Parameters:
     Description: Branch allowed to assume the deployment role.
 
 Resources:
+  ApplicationCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Ref ApplicationName
+      Tags:
+        - Key: Application
+          Value: !Ref ApplicationName
+        - Key: ManagedBy
+          Value: CloudFormation
+
   ContainerRepository:
     Type: AWS::ECR::Repository
     DeletionPolicy: Delete
@@ -237,6 +247,10 @@ Resources:
           Value: CloudFormation
 
 Outputs:
+  ApplicationClusterName:
+    Description: ECS cluster that hosts the FormForge Express service.
+    Value: !Ref ApplicationCluster
+
   ContainerRepositoryName:
     Description: ECR repository name used by the delivery workflow.
     Value: !Ref ContainerRepository

@@ -1,0 +1,89 @@
+name: Deploy production
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy verified image to ECS Express
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.endpoint }}
+
+    steps:
+      - name: Assume the AWS delivery role
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Verify the selected release exists
+        env:
+          ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+          IMAGE_TAG: sha-${{ github.sha }}
+        run: |
+          aws ecr describe-images \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-ids "imageTag=$IMAGE_TAG" > /dev/null
+
+      - name: Deploy the production service
+        id: deploy
+        uses: aws-actions/amazon-ecs-deploy-express-service@v1
+        with:
+          service-name: formforge-production
+          cluster: ${{ vars.ECS_CLUSTER }}
+          image: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:sha-${{ github.sha }}
+          execution-role-arn: ${{ vars.ECS_TASK_EXECUTION_ROLE_ARN }}
+          infrastructure-role-arn: ${{ vars.ECS_EXPRESS_INFRASTRUCTURE_ROLE_ARN }}
+          container-port: "4000"
+          environment-variables: |
+            [
+              {"name":"NODE_ENV","value":"production"},
+              {"name":"PORT","value":"4000"},
+              {"name":"SESSION_TTL_HOURS","value":"12"}
+            ]
+          secrets: |
+            [
+              {"name":"MONGODB_URI","valueFrom":"/formforge/production/mongodb-uri"}
+            ]
+          cpu: "256"
+          memory: "512"
+          health-check-path: /api/health
+          min-task-count: "1"
+          max-task-count: "2"
+          auto-scaling-metric: AVERAGE_CPU
+          auto-scaling-target-value: "70"
+          tags: |
+            [
+              {"key":"Application","value":"formforge"},
+              {"key":"Environment","value":"production"},
+              {"key":"ManagedBy","value":"GitHubActions"}
+            ]
+          mutate-tags-on-update: "true"
+
+      - name: Smoke-test the public health endpoint
+        env:
+          ENDPOINT: ${{ steps.deploy.outputs.endpoint }}
+        run: |
+          curl --fail --show-error \
+            --retry 10 \
+            --retry-delay 3 \
+            --retry-all-errors \
+            "$ENDPOINT/api/health"
+
+      - name: Publish the deployment endpoint
+        env:
+          ENDPOINT: ${{ steps.deploy.outputs.endpoint }}
+        run: echo "Production endpoint — $ENDPOINT" >> "$GITHUB_STEP_SUMMARY"

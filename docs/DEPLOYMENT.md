@@ -52,6 +52,12 @@ The production Atlas URI is supplied to ECS from the SSM Parameter Store
 `SecureString` `/formforge/production/mongodb-uri`. It is never stored in the
 repository or GitHub.
 
+Production deployment is a separate, manually triggered GitHub workflow. It
+selects the immutable image for the chosen `main` commit, deploys it to ECS
+Express Mode, waits for service stability, and smoke-tests the public health
+endpoint. This explicit gate prevents every application commit from
+automatically creating or changing continuously billed infrastructure.
+
 ## Runtime configuration
 
 Production secrets belong in the hosting platform, never in GitHub or the

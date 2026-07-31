@@ -8,6 +8,7 @@ can be reviewed before any continuously billed runtime is created.
 `foundation.yml` creates:
 
 - a private ECR repository with immutable tags, scanning, and retention rules;
+- an empty ECS cluster for the production service;
 - a GitHub OIDC provider;
 - a GitHub deployment role restricted to this repository's immutable owner and
   repository identity on `main`;
@@ -44,6 +45,7 @@ stored as repository variables, not hard-coded in the workflow.
 | --- | --- |
 | `AWS_REGION` | Deployment region, currently `eu-west-1` |
 | `ECR_REPOSITORY` | `ContainerRepositoryName` |
+| `ECS_CLUSTER` | `ApplicationClusterName` |
 | `AWS_DEPLOY_ROLE_ARN` | `GitHubDeploymentRoleArn` |
 | `ECS_TASK_EXECUTION_ROLE_ARN` | `TaskExecutionRoleArn` |
 | `ECS_EXPRESS_INFRASTRUCTURE_ROLE_ARN` | `ExpressInfrastructureRoleArn` |
@@ -60,10 +62,11 @@ log.
 
 ## Stage 2: runtime
 
-The runtime will use ECS Express Mode with the verified commit-SHA image,
-`/api/health` as its load-balancer health check, and the smallest practical task
-size. Creating the service also provisions Fargate and an Application Load
-Balancer, which consume AWS credits while they exist.
+The manually triggered `Deploy production` GitHub workflow uses ECS Express Mode
+with the verified commit-SHA image, `/api/health` as its load-balancer health
+check, and the smallest practical task size. Creating the service also
+provisions Fargate and an Application Load Balancer, which consume AWS credits
+while they exist.
 
 The runtime remains gated on:
 
