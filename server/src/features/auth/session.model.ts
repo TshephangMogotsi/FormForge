@@ -1,4 +1,6 @@
-import { Schema, model, models, type Model, type Types } from "mongoose";
+import mongoose, { type Model, type Types } from "mongoose";
+
+const { Schema } = mongoose;
 
 export type SessionDatabaseRecord = {
   userId: Types.ObjectId;
@@ -35,5 +37,5 @@ const sessionSchema = new Schema<SessionDatabaseRecord>(
 );
 
 export const SessionModel =
-  (models.Session as Model<SessionDatabaseRecord> | undefined) ??
-  model<SessionDatabaseRecord>("Session", sessionSchema);
+  (mongoose.models.Session as Model<SessionDatabaseRecord> | undefined) ??
+  mongoose.model<SessionDatabaseRecord>("Session", sessionSchema);

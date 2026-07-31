@@ -1,4 +1,6 @@
-import { Schema, model, models, type Model, type Types } from "mongoose";
+import mongoose, { type Model, type Types } from "mongoose";
+
+const { Schema } = mongoose;
 
 export type FormDatabaseRecord = {
   ownerId: Types.ObjectId;
@@ -46,5 +48,5 @@ const formSchema = new Schema<FormDatabaseRecord>(
 formSchema.index({ ownerId: 1, updatedAt: -1 });
 
 export const FormModel =
-  (models.Form as Model<FormDatabaseRecord> | undefined) ??
-  model<FormDatabaseRecord>("Form", formSchema);
+  (mongoose.models.Form as Model<FormDatabaseRecord> | undefined) ??
+  mongoose.model<FormDatabaseRecord>("Form", formSchema);

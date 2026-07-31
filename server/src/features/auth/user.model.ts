@@ -1,4 +1,6 @@
-import { Schema, model, models, type Model } from "mongoose";
+import mongoose, { type Model } from "mongoose";
+
+const { Schema } = mongoose;
 
 export type UserDatabaseRecord = {
   name: string;
@@ -39,5 +41,5 @@ const userSchema = new Schema<UserDatabaseRecord>(
 );
 
 export const UserModel =
-  (models.User as Model<UserDatabaseRecord> | undefined) ??
-  model<UserDatabaseRecord>("User", userSchema);
+  (mongoose.models.User as Model<UserDatabaseRecord> | undefined) ??
+  mongoose.model<UserDatabaseRecord>("User", userSchema);
