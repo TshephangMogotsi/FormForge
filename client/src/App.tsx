@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import {
   BarChart3,
   Blocks,
@@ -12,8 +12,18 @@ import {
   Sparkles
 } from "lucide-react";
 import { AuthPage } from "./features/auth/AuthPage";
-import { BuilderPage } from "./features/builder/BuilderPage";
 import { api, type FormSummary, type User } from "./lib/api";
+
+const BuilderPage = lazy(() =>
+  import("./features/builder/BuilderPage").then((module) => ({ default: module.BuilderPage }))
+);
+const PublicFormPage = lazy(() =>
+  import("./features/public/PublicFormPage").then((module) => ({ default: module.PublicFormPage }))
+);
+
+const publicFormSlug = window.location.pathname.match(
+  /^\/f\/([a-z0-9]+(?:-[a-z0-9]+)*)\/?$/
+)?.[1] ?? null;
 
 type View = "dashboard" | "builder";
 
@@ -213,7 +223,7 @@ function AppLoading() {
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
-  const [checkingSession, setCheckingSession] = useState(true);
+  const [checkingSession, setCheckingSession] = useState(publicFormSlug === null);
   const [view, setView] = useState<View>("dashboard");
   const [forms, setForms] = useState<FormSummary[]>([]);
   const [formsLoading, setFormsLoading] = useState(false);
@@ -222,6 +232,7 @@ export default function App() {
   const [activeForm, setActiveForm] = useState<FormSummary | null>(null);
 
   useEffect(() => {
+    if (publicFormSlug) return;
     api
       .me()
       .then(setUser)
@@ -271,6 +282,13 @@ export default function App() {
     }
   }
 
+  if (publicFormSlug) {
+    return (
+      <Suspense fallback={<AppLoading />}>
+        <PublicFormPage slug={publicFormSlug} />
+      </Suspense>
+    );
+  }
   if (checkingSession) return <AppLoading />;
   if (!user) {
     return (
@@ -299,16 +317,18 @@ export default function App() {
           }}
         />
       ) : (
-        <BuilderPage
-          formId={activeForm.id}
-          onBack={() => setView("dashboard")}
-          onSaved={(savedForm) => {
-            setActiveForm(savedForm);
-            setForms((current) =>
-              current.map((form) => (form.id === savedForm.id ? savedForm : form))
-            );
-          }}
-        />
+        <Suspense fallback={<AppLoading />}>
+          <BuilderPage
+            formId={activeForm.id}
+            onBack={() => setView("dashboard")}
+            onSaved={(savedForm) => {
+              setActiveForm(savedForm);
+              setForms((current) =>
+                current.map((form) => (form.id === savedForm.id ? savedForm : form))
+              );
+            }}
+          />
+        </Suspense>
       )}
     </AppShell>
   );

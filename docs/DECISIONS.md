@@ -134,3 +134,28 @@ because there is one owner editing a bounded maximum of 50 fields. Concurrent ta
 therefore use last-write-wins semantics. If measured usage requires collaborative
 or multi-device editing, the next step is optimistic concurrency with a draft
 revision—not premature real-time infrastructure.
+
+## ADR-016: Store published versions separately and advance them transactionally
+
+Each publish inserts a new immutable snapshot in a dedicated collection and updates
+the form's live-version pointer in the same MongoDB transaction. Public reads follow
+the stable slug to that pointer and never render the mutable draft. Republish retains
+the slug and increments the version, so existing links remain valid while recorded
+submissions continue to identify the schema they answered.
+
+Overwriting one embedded `publishedSnapshot` was rejected because it loses history.
+Embedding every version in the form was rejected because publication history is not
+a safely bounded array. A separate snapshot service was also rejected because the
+modular monolith and MongoDB transaction already provide the required consistency.
+
+## ADR-017: Revalidate public submissions and store them separately
+
+The public client derives fast field-level feedback from the published definition,
+but the API independently checks required fields, value types, dropdown membership,
+duplicates, and unknown field IDs against the exact live version. Accepted answers
+are stored in a separate indexed collection with their form and version references.
+Submission content is not returned from the write endpoint or included in logs.
+
+Embedding submissions inside forms was rejected because response counts are
+unbounded and have different pagination and analytics access patterns. Trusting only
+browser validation was rejected because public callers can bypass the client.

@@ -20,6 +20,7 @@ import { MongooseUserRepository } from "./features/auth/user.repository.js";
 import { MongooseFormRepository } from "./features/forms/form.repository.js";
 import { createFormRouter } from "./features/forms/form.routes.js";
 import { FormService } from "./features/forms/form.service.js";
+import { createPublicFormRouter } from "./features/forms/public-form.routes.js";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
 import { requestContext } from "./middleware/request-context.js";
 import { healthRouter } from "./routes/health.route.js";
@@ -94,6 +95,7 @@ export function createApp(
   app.use("/api/health", healthRouter);
   app.use("/api/v1/auth", createAuthRouter(services.auth));
   app.use("/api/v1/forms", createFormRouter(services.auth, services.forms));
+  app.use("/api/v1/public/forms", createPublicFormRouter(services.forms));
 
   if (env.NODE_ENV === "production") {
     app.use(

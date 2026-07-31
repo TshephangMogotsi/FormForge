@@ -740,6 +740,43 @@ a {
   box-shadow: 0 10px 24px rgba(72, 34, 28, 0.12);
 }
 
+.builder-publish-notice {
+  position: fixed;
+  z-index: 11;
+  top: 82px;
+  right: 18px;
+  display: flex;
+  max-width: min(470px, calc(100% - 36px));
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #c7dccd;
+  border-radius: 10px;
+  color: var(--brand-dark);
+  background: #f1f8f3;
+  padding: 8px 9px 8px 12px;
+  box-shadow: 0 10px 24px rgba(27, 69, 45, 0.12);
+}
+
+.builder-publish-notice > span {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.builder-publish-notice strong {
+  font-size: 11px;
+}
+
+.builder-publish-notice small {
+  overflow: hidden;
+  margin-top: 2px;
+  color: #587363;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .builder-feedback {
   display: flex;
   min-height: 100vh;
@@ -1188,6 +1225,198 @@ a {
   color: var(--muted);
   padding: 24px;
   text-align: center;
+}
+
+.public-form-page,
+.public-form-state {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(166, 197, 168, 0.24), transparent 30%),
+    #f4f6f3;
+  padding: clamp(24px, 7vw, 72px) 16px;
+}
+
+.public-form-card,
+.public-success {
+  width: min(100%, 680px);
+  margin: 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: white;
+  padding: clamp(26px, 7vw, 58px);
+  box-shadow: 0 20px 60px rgba(35, 54, 41, 0.08);
+}
+
+.public-form-header {
+  padding-bottom: 32px;
+  border-bottom: 1px solid var(--line);
+}
+
+.public-form-header h1,
+.public-success h1,
+.public-form-state h1 {
+  margin: 8px 0 10px;
+  font-family: "Manrope", sans-serif;
+  font-size: clamp(30px, 7vw, 46px);
+  letter-spacing: -0.045em;
+  line-height: 1.08;
+}
+
+.public-form-header p,
+.public-success p,
+.public-form-state p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.public-field-list {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding: 34px 0;
+}
+
+.public-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.public-field > label {
+  margin-bottom: 7px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.public-field-description {
+  margin: -1px 0 9px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.public-field > input,
+.public-field > textarea,
+.public-field > select {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid #d7ded8;
+  border-radius: 10px;
+  outline: 0;
+  color: var(--ink);
+  background: white;
+  padding: 12px 13px;
+  font-size: 16px;
+}
+
+.public-field > textarea {
+  min-height: 112px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.public-field > input:focus,
+.public-field > textarea:focus,
+.public-field > select:focus {
+  border-color: #71947d;
+  box-shadow: 0 0 0 3px rgba(36, 92, 63, 0.1);
+}
+
+.public-field.has-error > input,
+.public-field.has-error > textarea,
+.public-field.has-error > select,
+.public-field.has-error .public-checkbox {
+  border-color: #d4897f;
+}
+
+.public-checkbox {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #d7ded8;
+  border-radius: 10px;
+  padding: 10px 13px;
+  color: #4d5951;
+  font-size: 14px;
+}
+
+.public-checkbox input {
+  width: 19px;
+  height: 19px;
+  accent-color: var(--brand);
+}
+
+.public-field-error {
+  margin-top: 6px;
+  color: var(--danger);
+  font-size: 11px;
+}
+
+.public-submit-error {
+  margin-bottom: 14px;
+  border: 1px solid #edcec9;
+  border-radius: 9px;
+  color: #83382e;
+  background: #fff5f3;
+  padding: 10px 12px;
+  font-size: 12px;
+}
+
+.public-submit {
+  width: 100%;
+  min-height: 50px;
+}
+
+.public-powered {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 20px;
+  color: #7b867e;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.public-success {
+  min-height: 420px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  text-align: center;
+}
+
+.success-icon,
+.public-brand-mark {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  border-radius: 14px;
+  color: white;
+  background: var(--brand);
+}
+
+.public-success .public-powered {
+  margin-top: 34px;
+}
+
+.public-form-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.public-form-state h1 {
+  font-size: 32px;
 }
 
 .toggle-row {

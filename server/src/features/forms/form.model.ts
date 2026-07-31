@@ -9,6 +9,9 @@ export type FormDatabaseRecord = {
   description: string;
   fields: FormField[];
   status: "draft" | "published";
+  slug?: string;
+  publishedVersion: number;
+  publishedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -63,6 +66,20 @@ const formSchema = new Schema<FormDatabaseRecord>(
       default: "draft",
       required: true,
       index: true
+    },
+    slug: {
+      type: String,
+      trim: true,
+      maxlength: 80
+    },
+    publishedVersion: {
+      type: Number,
+      default: 0,
+      min: 0,
+      required: true
+    },
+    publishedAt: {
+      type: Date
     }
   },
   {
@@ -72,6 +89,7 @@ const formSchema = new Schema<FormDatabaseRecord>(
 );
 
 formSchema.index({ ownerId: 1, updatedAt: -1 });
+formSchema.index({ slug: 1 }, { unique: true, sparse: true });
 
 export const FormModel =
   (mongoose.models.Form as Model<FormDatabaseRecord> | undefined) ??

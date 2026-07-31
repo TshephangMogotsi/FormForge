@@ -51,6 +51,7 @@ All form endpoints require authentication.
 - `POST /api/v1/forms`
 - `GET /api/v1/forms/:formId`
 - `PATCH /api/v1/forms/:formId`
+- `POST /api/v1/forms/:formId/publish`
 - `DELETE /api/v1/forms/:formId`
 
 List limits are bounded to 50. Read, update, and delete operations scope the
@@ -68,7 +69,7 @@ Example create request:
 Draft fields are embedded in the form and replaced atomically through `PATCH`.
 Each field has a stable client-generated UUID and one of `shortText`, `longText`,
 `number`, `select`, or `checkbox`. A form is limited to 50 fields and a dropdown
-to 20 non-empty options.
+to 20 unique, non-empty options.
 
 Example draft update:
 
@@ -90,11 +91,35 @@ Example draft update:
 }
 ```
 
+Publishing returns both the updated owner form and the immutable live version.
+The first publish creates a stable public slug; later publishes retain that slug
+and increment the version.
+
+## Public forms
+
+- `GET /api/v1/public/forms/:slug`
+- `POST /api/v1/public/forms/:slug/submissions`
+
+Public reads return only the current published snapshot. Submission input contains
+one answer per stable field ID:
+
+```json
+{
+  "answers": [
+    {
+      "fieldId": "b3b2c1d0-7a6f-4f52-91af-2f2a5cf56e21",
+      "value": "Very satisfied"
+    }
+  ]
+}
+```
+
+The API rejects duplicate or unknown field IDs, missing required answers, incorrect
+value types, and dropdown values absent from the published options. Successful
+responses return only a submission ID, form version, and submission timestamp.
+
 ## Planned routes
 
 - `POST /api/v1/forms/:formId/duplicate`
-- `POST /api/v1/forms/:formId/publish`
-- `GET /api/v1/public/forms/:slug`
-- `POST /api/v1/public/forms/:slug/submissions`
 - `GET /api/v1/forms/:formId/submissions`
 - `GET /api/v1/forms/:formId/analytics`

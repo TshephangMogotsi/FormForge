@@ -27,6 +27,8 @@ flowchart LR
   state for transient builder interactions.
 - Never acts as the authorization boundary.
 - Keeps the public form route smaller than owner-only builder and analytics code.
+- Lazy-loads builder and public-form bundles independently so respondents do not
+  download drag-and-drop dependencies.
 
 ### Express API
 
@@ -49,8 +51,9 @@ flowchart LR
 
 1. The owner saves changes to the mutable draft.
 2. The API validates the complete form definition.
-3. Publishing copies the draft into an immutable, versioned snapshot.
-4. The public route reads only the published snapshot.
+3. A MongoDB transaction inserts a new immutable version and advances the form's
+   live-version pointer together.
+4. The public route resolves the stable slug and reads only the pointed snapshot.
 
 ### Draft editing
 
@@ -67,6 +70,11 @@ flowchart LR
 2. The client validates for fast feedback.
 3. The API independently validates field IDs, required values, types, and options.
 4. The submission records the published form version used by the respondent.
+
+Published snapshots and submissions are separate collections. The API exposes no
+snapshot mutation path, and a submission stores only its version reference and
+validated answers. Public submission writes have a tighter rate limit than the
+general API boundary.
 
 ## Security boundaries
 

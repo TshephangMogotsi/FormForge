@@ -33,6 +33,14 @@ export const formFieldSchema = z
       });
     }
 
+    if (field.type === "select" && new Set(field.options).size !== field.options.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["options"],
+        message: "Dropdown options must be unique."
+      });
+    }
+
     if (field.type !== "select" && field.options.length > 0) {
       context.addIssue({
         code: "custom",
@@ -80,6 +88,39 @@ export const updateFormSchema = z
 
 export const formIdSchema = z.string().regex(/^[a-f\d]{24}$/i, "Enter a valid form identifier.");
 
+export const publicFormSlugSchema = z
+  .string()
+  .trim()
+  .min(3)
+  .max(80)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Enter a valid public form slug.");
+
+export const submissionAnswerSchema = z
+  .object({
+    fieldId: z.uuid(),
+    value: z.union([z.string().max(5000), z.number().finite(), z.boolean()])
+  })
+  .strict();
+
+export const createSubmissionSchema = z
+  .object({
+    answers: z.array(submissionAnswerSchema).max(50)
+  })
+  .strict()
+  .superRefine((submission, context) => {
+    const seenFieldIds = new Set<string>();
+    submission.answers.forEach((answer, index) => {
+      if (seenFieldIds.has(answer.fieldId)) {
+        context.addIssue({
+          code: "custom",
+          path: ["answers", index, "fieldId"],
+          message: "Each field can be answered only once."
+        });
+      }
+      seenFieldIds.add(answer.fieldId);
+    });
+  });
+
 export const listFormsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(50).default(20)
@@ -89,3 +130,5 @@ export type CreateFormInput = z.infer<typeof createFormSchema>;
 export type UpdateFormInput = z.infer<typeof updateFormSchema>;
 export type FormField = z.infer<typeof formFieldSchema>;
 export type FormFieldType = z.infer<typeof formFieldTypeSchema>;
+export type CreateSubmissionInput = z.infer<typeof createSubmissionSchema>;
+export type SubmissionAnswer = z.infer<typeof submissionAnswerSchema>;

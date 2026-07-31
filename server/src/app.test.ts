@@ -26,8 +26,11 @@ import type {
   FormPage,
   FormRecord,
   FormRepository,
+  PublishedFormRecord,
+  SubmissionRecord,
   UpdateFormRecord
 } from "./features/forms/form.repository.js";
+import type { SubmissionAnswer } from "./features/forms/form.schemas.js";
 import { FormService } from "./features/forms/form.service.js";
 
 class InMemoryUserRepository implements UserRepository {
@@ -121,7 +124,10 @@ class CapturingPasswordResetNotifier implements PasswordResetNotifier {
 
 class InMemoryFormRepository implements FormRepository {
   private readonly forms = new Map<string, FormRecord>();
+  private readonly publications = new Map<string, PublishedFormRecord[]>();
+  private submissions: SubmissionRecord[] = [];
   private nextId = 100;
+  private nextSubmissionId = 1000;
 
   async create(input: CreateFormRecord): Promise<FormRecord> {
     const now = new Date();
@@ -129,6 +135,9 @@ class InMemoryFormRepository implements FormRepository {
       ...input,
       id: this.nextId.toString(16).padStart(24, "0"),
       status: "draft",
+      slug: null,
+      publishedVersion: 0,
+      publishedAt: null,
       createdAt: now,
       updatedAt: now
     };
@@ -170,7 +179,74 @@ class InMemoryFormRepository implements FormRepository {
 
   async deleteByOwnerAndId(ownerId: string, formId: string): Promise<boolean> {
     const form = await this.findByOwnerAndId(ownerId, formId);
-    return form ? this.forms.delete(formId) : false;
+    if (!form) return false;
+    this.publications.delete(formId);
+    this.submissions = this.submissions.filter((submission) => submission.formId !== formId);
+    return this.forms.delete(formId);
+  }
+
+  async publishByOwnerAndId(
+    ownerId: string,
+    formId: string,
+    slug: string
+  ): Promise<{ form: FormRecord; publication: PublishedFormRecord } | null> {
+    const form = await this.findByOwnerAndId(ownerId, formId);
+    if (!form) return null;
+
+    const publishedAt = new Date();
+    const version = form.publishedVersion + 1;
+    const publicSlug = form.slug ?? slug;
+    const publication: PublishedFormRecord = {
+      formId,
+      slug: publicSlug,
+      version,
+      title: form.title,
+      description: form.description,
+      fields: structuredClone(form.fields),
+      publishedAt
+    };
+    const updatedForm: FormRecord = {
+      ...form,
+      status: "published",
+      slug: publicSlug,
+      publishedVersion: version,
+      publishedAt,
+      updatedAt: publishedAt
+    };
+
+    this.forms.set(formId, updatedForm);
+    this.publications.set(formId, [
+      ...(this.publications.get(formId) ?? []),
+      publication
+    ]);
+    return { form: updatedForm, publication };
+  }
+
+  async findPublishedBySlug(slug: string): Promise<PublishedFormRecord | null> {
+    const form = [...this.forms.values()].find(
+      (candidate) => candidate.slug === slug && candidate.status === "published"
+    );
+    if (!form) return null;
+    return (
+      this.publications
+        .get(form.id)
+        ?.find((publication) => publication.version === form.publishedVersion) ?? null
+    );
+  }
+
+  async createSubmission(input: {
+    formId: string;
+    formVersion: number;
+    answers: SubmissionAnswer[];
+  }): Promise<SubmissionRecord> {
+    const submission: SubmissionRecord = {
+      ...input,
+      id: this.nextSubmissionId.toString(16).padStart(24, "0"),
+      createdAt: new Date()
+    };
+    this.nextSubmissionId += 1;
+    this.submissions.push(submission);
+    return submission;
   }
 }
 
@@ -522,6 +598,103 @@ describe("FormForge API", () => {
     expect((await owner.get(`/api/v1/forms/${formId}`)).body.data.form.fields).toEqual([]);
   });
 
+  it("publishes immutable versions and validates public submissions against the live version", async () => {
+    const owner = request.agent(app);
+    await register(owner, "owner@example.com");
+    const creation = await owner.post("/api/v1/forms").send({ title: "Product feedback" });
+    const formId = creation.body.data.form.id as string;
+    const requiredFieldId = "b3b2c1d0-7a6f-4f52-91af-2f2a5cf56e21";
+    const selectFieldId = "70b39b40-5fe6-4181-bd80-83f2739010d3";
+    const firstDraftFields = [
+      {
+        id: requiredFieldId,
+        type: "shortText",
+        label: "What should we improve?",
+        description: "",
+        placeholder: "Share one idea",
+        required: true,
+        options: []
+      },
+      {
+        id: selectFieldId,
+        type: "select",
+        label: "Would you recommend us?",
+        description: "",
+        placeholder: "Choose one",
+        required: false,
+        options: ["Yes", "No"]
+      }
+    ];
+    await owner.patch(`/api/v1/forms/${formId}`).send({ fields: firstDraftFields });
+
+    const firstPublish = await owner.post(`/api/v1/forms/${formId}/publish`);
+    expect(firstPublish.status).toBe(201);
+    expect(firstPublish.body.data.publication).toMatchObject({
+      version: 1,
+      title: "Product feedback"
+    });
+    const slug = firstPublish.body.data.publication.slug as string;
+    expect(slug).toMatch(/^product-feedback-[a-f\d]{8}$/);
+
+    await owner.patch(`/api/v1/forms/${formId}`).send({
+      fields: [
+        { ...firstDraftFields[0], label: "What is the single biggest improvement?" },
+        firstDraftFields[1]
+      ]
+    });
+
+    const stillLiveVersionOne = await request(app).get(`/api/v1/public/forms/${slug}`);
+    expect(stillLiveVersionOne.status).toBe(200);
+    expect(stillLiveVersionOne.body.data.form.version).toBe(1);
+    expect(stillLiveVersionOne.body.data.form.fields[0].label).toBe("What should we improve?");
+
+    const secondPublish = await owner.post(`/api/v1/forms/${formId}/publish`);
+    expect(secondPublish.status).toBe(201);
+    expect(secondPublish.body.data.publication).toMatchObject({ slug, version: 2 });
+
+    const validSubmission = await request(app)
+      .post(`/api/v1/public/forms/${slug}/submissions`)
+      .send({
+        answers: [
+          { fieldId: requiredFieldId, value: "Faster onboarding" },
+          { fieldId: selectFieldId, value: "Yes" }
+        ]
+      });
+    expect(validSubmission.status).toBe(201);
+    expect(validSubmission.body.data.submission).toMatchObject({
+      id: expect.any(String),
+      formVersion: 2,
+      submittedAt: expect.any(String)
+    });
+
+    const invalidSubmission = await request(app)
+      .post(`/api/v1/public/forms/${slug}/submissions`)
+      .send({ answers: [{ fieldId: selectFieldId, value: "Maybe" }] });
+    expect(invalidSubmission.status).toBe(400);
+    expect(invalidSubmission.body.error.code).toBe("INVALID_SUBMISSION");
+    expect(invalidSubmission.body.error.details).toEqual(
+      expect.arrayContaining([
+        { fieldId: requiredFieldId, message: "This field is required." },
+        { fieldId: selectFieldId, message: "Choose one of the available options." }
+      ])
+    );
+
+    expect((await owner.delete(`/api/v1/forms/${formId}`)).status).toBe(204);
+    const deletedPublicForm = await request(app).get(`/api/v1/public/forms/${slug}`);
+    expect(deletedPublicForm.status).toBe(404);
+    expect(deletedPublicForm.body.error.code).toBe("PUBLIC_FORM_NOT_FOUND");
+  });
+
+  it("refuses to publish an empty form", async () => {
+    const owner = request.agent(app);
+    await register(owner, "owner@example.com");
+    const creation = await owner.post("/api/v1/forms").send({ title: "Empty form" });
+
+    const publish = await owner.post(`/api/v1/forms/${creation.body.data.form.id}/publish`);
+    expect(publish.status).toBe(400);
+    expect(publish.body.error.code).toBe("EMPTY_FORM");
+  });
+
   it("hides another user's forms behind the ownership boundary", async () => {
     const owner = request.agent(app);
     const outsider = request.agent(app);
@@ -536,8 +709,9 @@ describe("FormForge API", () => {
       .patch(`/api/v1/forms/${formId}`)
       .send({ title: "Hijacked" });
     const deletion = await outsider.delete(`/api/v1/forms/${formId}`);
+    const publish = await outsider.post(`/api/v1/forms/${formId}/publish`);
 
-    for (const response of [read, update, deletion]) {
+    for (const response of [read, update, deletion, publish]) {
       expect(response.status).toBe(404);
       expect(response.body.error.code).toBe("FORM_NOT_FOUND");
     }

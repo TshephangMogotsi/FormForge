@@ -27,11 +27,11 @@
 
 ## Phase 4 — Publishing and submissions
 
-- [ ] Publish immutable snapshots with version numbers.
-- [ ] Render public forms by slug.
-- [ ] Generate client validation from field definitions.
-- [ ] Revalidate every submission against the published schema.
-- [ ] Store submissions separately from forms.
+- [x] Publish immutable snapshots with version numbers.
+- [x] Render public forms by slug.
+- [x] Generate client validation from field definitions.
+- [x] Revalidate every submission against the published schema.
+- [x] Store submissions separately from forms.
 
 ## Phase 5 — Responses and delivery
 

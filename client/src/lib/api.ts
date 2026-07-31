@@ -24,8 +24,26 @@ export type FormSummary = {
   description: string;
   fields: FormField[];
   status: "draft" | "published";
+  slug: string | null;
+  publishedVersion: number;
+  publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type PublishedForm = {
+  formId: string;
+  slug: string;
+  version: number;
+  title: string;
+  description: string;
+  fields: FormField[];
+  publishedAt: string;
+};
+
+export type SubmissionAnswer = {
+  fieldId: string;
+  value: string | number | boolean;
 };
 
 type ApiErrorBody = {
@@ -33,6 +51,7 @@ type ApiErrorBody = {
     code?: string;
     message?: string;
     requestId?: string;
+    details?: Array<{ fieldId?: string; path?: string; message?: string }>;
   };
 };
 
@@ -41,7 +60,8 @@ export class ApiError extends Error {
     message: string,
     public readonly status: number,
     public readonly code = "UNKNOWN_ERROR",
-    public readonly requestId?: string
+    public readonly requestId?: string,
+    public readonly details?: Array<{ fieldId?: string; path?: string; message?: string }>
   ) {
     super(message);
     this.name = "ApiError";
@@ -68,7 +88,8 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
       body.error?.message ?? "The request could not be completed.",
       response.status,
       body.error?.code,
-      body.error?.requestId
+      body.error?.requestId,
+      body.error?.details
     );
   }
 
@@ -161,5 +182,31 @@ export const api = {
       }
     );
     return response.data.form;
+  },
+
+  async publishForm(formId: string) {
+    const response = await apiRequest<{
+      data: { form: FormSummary; publication: PublishedForm };
+    }>(`/api/v1/forms/${formId}/publish`, { method: "POST" });
+    return response.data;
+  },
+
+  async getPublicForm(slug: string) {
+    const response = await apiRequest<{ data: { form: PublishedForm } }>(
+      `/api/v1/public/forms/${encodeURIComponent(slug)}`
+    );
+    return response.data.form;
+  },
+
+  async submitPublicForm(slug: string, answers: SubmissionAnswer[]) {
+    const response = await apiRequest<{
+      data: {
+        submission: { id: string; formVersion: number; submittedAt: string };
+      };
+    }>(`/api/v1/public/forms/${encodeURIComponent(slug)}/submissions`, {
+      method: "POST",
+      body: JSON.stringify({ answers })
+    });
+    return response.data.submission;
   }
 };

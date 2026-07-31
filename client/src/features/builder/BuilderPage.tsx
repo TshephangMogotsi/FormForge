@@ -21,8 +21,10 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   CheckSquare,
   ChevronLeft,
+  ClipboardCheck,
   Copy,
   Eye,
+  ExternalLink,
   GripVertical,
   Hash,
   List,
@@ -372,6 +374,10 @@ export function BuilderPage({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [previewing, setPreviewing] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [publishedVersion, setPublishedVersion] = useState(0);
+  const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
   const lastSavedSnapshot = useRef("");
   const currentSnapshot = useRef("");
   const saveSequence = useRef(0);
@@ -409,6 +415,8 @@ export function BuilderPage({
         setDescription(loadedDraft.description);
         setFields(loadedDraft.fields);
         setSelectedId(loadedDraft.fields[0]?.id ?? null);
+        setPublishedVersion(form.publishedVersion);
+        setPublishedUrl(form.slug ? `${window.location.origin}/f/${form.slug}` : null);
         lastSavedSnapshot.current = JSON.stringify(loadedDraft);
         setSaveState("saved");
         setLoaded(true);
@@ -510,6 +518,38 @@ export function BuilderPage({
     onBack();
   }
 
+  async function handlePublish() {
+    if (publishing) return;
+    if (currentSnapshot.current !== lastSavedSnapshot.current) {
+      const saved = await saveDraft();
+      if (!saved) return;
+    }
+
+    setPublishing(true);
+    setSaveError(null);
+    try {
+      const result = await api.publishForm(formId);
+      onSavedRef.current(result.form);
+      setPublishedVersion(result.publication.version);
+      setPublishedUrl(`${window.location.origin}/f/${result.publication.slug}`);
+      setLinkCopied(false);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "The form could not be published.");
+    } finally {
+      setPublishing(false);
+    }
+  }
+
+  async function copyPublishedUrl() {
+    if (!publishedUrl) return;
+    try {
+      await navigator.clipboard.writeText(publishedUrl);
+      setLinkCopied(true);
+    } catch {
+      setSaveError("Copying failed. Open the form and copy its address from the browser.");
+    }
+  }
+
   if (loadError) {
     return (
       <div className="builder-feedback" role="alert">
@@ -555,7 +595,7 @@ export function BuilderPage({
                 onChange={(event) => setTitle(event.target.value)}
               />
               <span className={`save-state ${saveState}`} aria-live="polite">
-                Draft <i /> {saveStateLabel(saveState)}
+                {publishedVersion ? `Published v${publishedVersion}` : "Draft"} <i /> {saveStateLabel(saveState)}
               </span>
             </div>
           </div>
@@ -573,8 +613,15 @@ export function BuilderPage({
               {saveState === "saving" ? <LoaderCircle className="spin" size={17} /> : <Save size={17} />}
               Save draft
             </button>
-            <button className="primary-button" type="button" disabled title="Publishing is the next delivery phase">
-              <Send size={17} /> Publish
+            <button
+              className="primary-button"
+              type="button"
+              disabled={publishing || fields.length === 0}
+              title={fields.length === 0 ? "Add at least one field before publishing" : undefined}
+              onClick={() => void handlePublish()}
+            >
+              {publishing ? <LoaderCircle className="spin" size={17} /> : <Send size={17} />}
+              {publishing ? "Publishing…" : publishedVersion ? "Publish update" : "Publish"}
             </button>
           </div>
         </header>
@@ -583,6 +630,21 @@ export function BuilderPage({
           <button className="builder-save-error" type="button" onClick={() => void saveDraft()}>
             {saveError} Select to retry.
           </button>
+        )}
+
+        {publishedUrl && !saveError && (
+          <div className="builder-publish-notice" role="status">
+            <span>
+              <strong>Form is live</strong>
+              <small>{publishedUrl}</small>
+            </span>
+            <button className="icon-button" type="button" onClick={() => void copyPublishedUrl()} aria-label="Copy public form link">
+              {linkCopied ? <ClipboardCheck size={17} /> : <Copy size={17} />}
+            </button>
+            <a className="icon-button" href={publishedUrl} target="_blank" rel="noreferrer" aria-label="Open public form">
+              <ExternalLink size={17} />
+            </a>
+          </div>
         )}
 
         {previewing ? (

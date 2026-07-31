@@ -62,6 +62,15 @@ export function createFormRouter(authService: AuthService, formService: FormServ
     })
   );
 
+  router.post(
+    "/:formId/publish",
+    asyncHandler(async (request, response) => {
+      const formId = formIdSchema.parse(request.params.formId);
+      const result = await formService.publish(request.auth!.userId, formId);
+      response.status(201).json({ data: result });
+    })
+  );
+
   router.delete(
     "/:formId",
     asyncHandler(async (request, response) => {
