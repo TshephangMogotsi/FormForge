@@ -72,6 +72,19 @@ Express Mode, waits for service stability, and smoke-tests the public health
 endpoint. This explicit gate prevents every application commit from
 automatically creating or changing continuously billed infrastructure.
 
+## Custom domain edge
+
+`formforge.valiantmedia.co.bw` is a proxied Cloudflare DNS record. A narrowly
+scoped Worker route forwards only `formforge.valiantmedia.co.bw/*` to the
+AWS-managed ECS Express hostname while rewriting the upstream hostname. This is
+required because the ECS Express gateway routes requests by its generated host.
+Cloudflare terminates public TLS; the Worker connects to the AWS origin over
+HTTPS. The generated AWS URL remains available for health checks and rollback.
+
+The route must never use `*.valiantmedia.co.bw/*`, because that would send every
+subdomain through the application Worker. `PUBLIC_APP_ORIGIN` is set to the
+branded HTTPS origin so password-reset links return users through the same edge.
+
 ## Runtime configuration
 
 Production secrets belong in the hosting platform, never in GitHub or the
@@ -92,7 +105,7 @@ repository's `.env` file.
 
 Before exposing the service:
 
-- configure TLS and the final `CLIENT_ORIGIN`;
+- configure TLS and the final `PUBLIC_APP_ORIGIN`;
 - create a least-privilege Atlas user for the `formforge` database;
 - allow only the API infrastructure's stable outbound address in Atlas;
 - confirm the ECS and load-balancer credit consumption before creating them;

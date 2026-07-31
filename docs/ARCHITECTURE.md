@@ -110,7 +110,8 @@ The first production shape remains deliberately simple:
 
 ```mermaid
 flowchart TB
-    DNS["DNS and TLS"] --> LB["Application load balancer"]
+    DNS["Cloudflare DNS and TLS"] --> Edge["Scoped hostname Worker"]
+    Edge --> LB["ECS Express gateway and load balancer"]
     LB --> Service["Containerized Node.js service"]
     Service --> Atlas["MongoDB Atlas"]
     Service --> Email["Amazon SES"]
@@ -126,6 +127,12 @@ The AWS deployment path assumes a narrowly scoped role through OIDC, pushes an
 immutable commit-SHA image to ECR, and deploys that exact artifact rather than
 rebuilding source independently. Runtime secrets are resolved by the ECS task
 execution role from SSM Parameter Store.
+
+The Cloudflare Worker is an edge hostname adapter rather than an application
+service: it applies only to the FormForge subdomain, preserves the request path,
+and forwards to the generated ECS Express hostname over HTTPS. Authentication,
+authorization, business logic, and data remain inside the same-origin MERN
+application boundary.
 
 Password-reset delivery is behind a notifier interface. The production adapter
 uses the ECS application task role to call Amazon SES from one verified sender;

@@ -2,6 +2,10 @@
 
 FormForge is a MERN form builder for creating, publishing, and analyzing dynamic forms.
 
+**Live application:** [formforge.valiantmedia.co.bw](https://formforge.valiantmedia.co.bw)
+
+**Public demo form:** [Customer experience pulse](https://formforge.valiantmedia.co.bw/f/customer-experience-pulse-b408a7eb)
+
 ## Current milestone
 
 The repository currently includes:

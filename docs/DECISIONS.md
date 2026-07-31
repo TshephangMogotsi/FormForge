@@ -172,3 +172,16 @@ Precomputed counters and an analytics worker were rejected at the current volume
 because they add write coordination, retry behavior, and reconciliation work without
 a measured latency problem. The documented scaling path is to pre-aggregate when
 observed response volume makes read-time aggregation too slow.
+
+## ADR-019: Adapt the branded hostname at the existing Cloudflare edge
+
+The `valiantmedia.co.bw` zone already uses Cloudflare. A Worker route scoped only
+to `formforge.valiantmedia.co.bw/*` forwards requests to the generated ECS Express
+hostname over HTTPS. The worker changes the upstream hostname required by the ECS
+gateway while preserving the public path and same-origin session boundary.
+
+Moving the zone to Route 53 was rejected because DNS ownership is already
+established at Cloudflare. Adding CloudFront and an ACM certificate was rejected
+for the first release because it would duplicate an existing edge and introduce
+another billed distribution. A direct DNS-only CNAME was rejected because the
+AWS-managed certificate does not cover the branded hostname.

@@ -39,7 +39,7 @@
 - [x] Add response trends and option distributions.
 - [x] Seed a demo account and realistic form.
 - [x] Finish responsive states and accessibility.
-- [ ] Deploy and record the demo workflow.
+- [x] Deploy and record the demo workflow.
 
 ## Phase 6 — Production engineering evidence
 
