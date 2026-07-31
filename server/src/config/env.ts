@@ -11,8 +11,11 @@ const envSchema = z
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
     PORT: z.coerce.number().int().positive().default(4000),
     CLIENT_ORIGIN: z.string().url().default("http://localhost:5173"),
+    PUBLIC_APP_ORIGIN: z.string().url().default("http://localhost:5173"),
     MONGODB_URI: z.string().min(1).optional(),
-    SESSION_TTL_HOURS: z.coerce.number().int().positive().max(720).default(12)
+    SESSION_TTL_HOURS: z.coerce.number().int().positive().max(720).default(12),
+    PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().min(10).max(120).default(30),
+    PASSWORD_RESET_FROM_EMAIL: z.string().trim().email().optional()
   })
   .superRefine((values, context) => {
     if (values.NODE_ENV === "production" && !values.MONGODB_URI) {

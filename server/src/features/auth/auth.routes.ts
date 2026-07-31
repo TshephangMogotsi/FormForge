@@ -5,7 +5,12 @@ import { env } from "../../config/env.js";
 import { AppError } from "../../lib/app-error.js";
 import { asyncHandler } from "../../lib/async-handler.js";
 import { authCookieName } from "./auth.constants.js";
-import { loginSchema, registerSchema } from "./auth.schemas.js";
+import {
+  forgotPasswordSchema,
+  loginSchema,
+  registerSchema,
+  resetPasswordSchema
+} from "./auth.schemas.js";
 import type { AuthService } from "./auth.service.js";
 
 const authCookieOptions: CookieOptions = {
@@ -21,6 +26,12 @@ export function createAuthRouter(authService: AuthService) {
   const credentialLimiter = rateLimit({
     windowMs: 15 * 60_000,
     limit: 20,
+    standardHeaders: "draft-8",
+    legacyHeaders: false
+  });
+  const recoveryLimiter = rateLimit({
+    windowMs: 15 * 60_000,
+    limit: 5,
     standardHeaders: "draft-8",
     legacyHeaders: false
   });
@@ -46,6 +57,38 @@ export function createAuthRouter(authService: AuthService) {
 
       response.cookie(authCookieName, result.token, authCookieOptions);
       response.json({ data: { user: result.user } });
+    })
+  );
+
+  router.post(
+    "/forgot-password",
+    recoveryLimiter,
+    asyncHandler(async (request, response) => {
+      const input = forgotPasswordSchema.parse(request.body);
+      await authService.requestPasswordReset(input);
+
+      response.status(202).json({
+        data: {
+          message: "If an account exists for that email, a reset link has been sent."
+        }
+      });
+    })
+  );
+
+  router.post(
+    "/reset-password",
+    recoveryLimiter,
+    asyncHandler(async (request, response) => {
+      const input = resetPasswordSchema.parse(request.body);
+      await authService.resetPassword(input);
+
+      response.clearCookie(authCookieName, {
+        httpOnly: true,
+        secure: env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/"
+      });
+      response.status(204).end();
     })
   );
 

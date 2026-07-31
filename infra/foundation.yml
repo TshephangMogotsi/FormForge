@@ -46,6 +46,14 @@ Parameters:
     AllowedPattern: "^[A-Za-z0-9._-]+$"
     Description: GitHub environment allowed to deploy the production service.
 
+  PasswordResetSenderEmail:
+    Type: String
+    Default: ""
+    Description: Verified Amazon SES identity used to send password-reset emails.
+
+Conditions:
+  HasPasswordResetSender: !Not [!Equals [!Ref PasswordResetSenderEmail, ""]]
+
 Resources:
   ApplicationCluster:
     Type: AWS::ECS::Cluster
@@ -150,6 +158,38 @@ Resources:
         - Key: ManagedBy
           Value: CloudFormation
 
+  ApplicationTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ApplicationName}-application"
+      Path: /formforge/
+      Description: Grants the FormForge container its narrowly scoped runtime permissions.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - !If
+          - HasPasswordResetSender
+          - PolicyName: SendPasswordResetEmail
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Sid: SendFromVerifiedIdentity
+                  Effect: Allow
+                  Action:
+                    - ses:SendEmail
+                  Resource: !Sub "arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${PasswordResetSenderEmail}"
+          - !Ref AWS::NoValue
+      Tags:
+        - Key: Application
+          Value: !Ref ApplicationName
+        - Key: ManagedBy
+          Value: CloudFormation
+
   ExpressInfrastructureRole:
     Type: AWS::IAM::Role
     Properties:
@@ -242,6 +282,11 @@ Resources:
                 Action:
                   - iam:PassRole
                 Resource: !GetAtt ExpressInfrastructureRole.Arn
+              - Sid: PassApplicationTaskRole
+                Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource: !GetAtt ApplicationTaskRole.Arn
       Tags:
         - Key: Application
           Value: !Ref ApplicationName
@@ -268,6 +313,10 @@ Outputs:
   TaskExecutionRoleArn:
     Description: ECS task execution role used by FormForge.
     Value: !GetAtt TaskExecutionRole.Arn
+
+  ApplicationTaskRoleArn:
+    Description: Runtime role assumed by the FormForge application container.
+    Value: !GetAtt ApplicationTaskRole.Arn
 
   ExpressInfrastructureRoleArn:
     Description: Infrastructure role used by ECS Express Mode.

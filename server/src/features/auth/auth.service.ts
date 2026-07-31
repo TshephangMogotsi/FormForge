@@ -1,6 +1,12 @@
 import { compare, hash } from "bcryptjs";
 import { AppError } from "../../lib/app-error.js";
-import type { LoginInput, RegisterInput } from "./auth.schemas.js";
+import type {
+  ForgotPasswordInput,
+  LoginInput,
+  RegisterInput,
+  ResetPasswordInput
+} from "./auth.schemas.js";
+import { PasswordResetService } from "./password-reset.service.js";
 import { SessionService } from "./session.service.js";
 import type { UserRecord, UserRepository } from "./user.repository.js";
 
@@ -24,6 +30,7 @@ export class AuthService {
   constructor(
     private readonly users: UserRepository,
     private readonly sessions: SessionService,
+    private readonly passwordResets: PasswordResetService,
     private readonly passwordCost = 12
   ) {}
 
@@ -73,5 +80,28 @@ export class AuthService {
 
   logout(token: string): Promise<void> {
     return this.sessions.revoke(token);
+  }
+
+  async requestPasswordReset(input: ForgotPasswordInput): Promise<void> {
+    const user = await this.users.findByEmail(input.email);
+    if (user) {
+      await this.passwordResets.request(user);
+    }
+  }
+
+  async resetPassword(input: ResetPasswordInput): Promise<void> {
+    const userId = await this.passwordResets.consume(input.token);
+    const passwordHash = await hash(input.password, this.passwordCost);
+    const updated = await this.users.updatePasswordHash(userId, passwordHash);
+
+    if (!updated) {
+      throw new AppError(
+        400,
+        "INVALID_RESET_TOKEN",
+        "This password reset link is invalid or has expired."
+      );
+    }
+
+    await this.sessions.revokeAll(userId);
   }
 }

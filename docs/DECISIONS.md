@@ -106,3 +106,17 @@ Reflecting arbitrary origins was rejected because credentialed requests use
 HTTP-only session cookies. Maintaining a production origin allowlist was also
 rejected for the initial same-origin deployment because it adds configuration
 without enabling a required client.
+
+## ADR-014: Use hashed, single-use password-reset tokens
+
+Forgot-password responses do not disclose whether an email address belongs to
+an account. A request for a known account replaces any older reset token with a
+new high-entropy token, stores only its SHA-256 digest, and sends the raw token
+only in the owner’s email link. Tokens expire after a short bounded lifetime and
+are atomically deleted when consumed. A successful reset revokes every existing
+session for that user.
+
+Email delivery sits behind a notifier interface. Production uses Amazon SES
+through a narrowly scoped ECS application task role; tests use an in-memory
+notifier. Returning reset tokens in API responses or writing them to logs was
+rejected because either choice would bypass proof of email ownership.

@@ -63,7 +63,12 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  async register(input: { name: string; email: string; password: string }) {
+  async register(input: {
+    name: string;
+    email: string;
+    password: string;
+    confirmPassword: string;
+  }) {
     const response = await apiRequest<{ data: { user: User } }>("/api/v1/auth/register", {
       method: "POST",
       body: JSON.stringify(input)
@@ -77,6 +82,24 @@ export const api = {
       body: JSON.stringify(input)
     });
     return response.data.user;
+  },
+
+  async forgotPassword(email: string) {
+    const response = await apiRequest<{ data: { message: string } }>(
+      "/api/v1/auth/forgot-password",
+      {
+        method: "POST",
+        body: JSON.stringify({ email })
+      }
+    );
+    return response.data.message;
+  },
+
+  resetPassword(input: { token: string; password: string; confirmPassword: string }) {
+    return apiRequest<void>("/api/v1/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify(input)
+    });
   },
 
   async me() {

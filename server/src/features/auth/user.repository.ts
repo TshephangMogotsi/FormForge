@@ -15,6 +15,7 @@ export interface UserRepository {
   create(input: CreateUserRecord): Promise<UserRecord>;
   findByEmail(email: string): Promise<UserRecord | null>;
   findById(userId: string): Promise<UserRecord | null>;
+  updatePasswordHash(userId: string, passwordHash: string): Promise<boolean>;
 }
 
 function toUserRecord(document: {
@@ -49,5 +50,13 @@ export class MongooseUserRepository implements UserRepository {
   async findById(userId: string): Promise<UserRecord | null> {
     const user = await UserModel.findById(userId).select("+passwordHash").exec();
     return user ? toUserRecord(user) : null;
+  }
+
+  async updatePasswordHash(userId: string, passwordHash: string): Promise<boolean> {
+    const result = await UserModel.updateOne(
+      { _id: userId },
+      { $set: { passwordHash } }
+    ).exec();
+    return result.matchedCount === 1;
   }
 }

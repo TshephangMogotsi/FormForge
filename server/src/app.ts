@@ -8,8 +8,14 @@ import { fileURLToPath } from "node:url";
 import { env } from "./config/env.js";
 import { createAuthRouter } from "./features/auth/auth.routes.js";
 import { AuthService } from "./features/auth/auth.service.js";
+import {
+  DisabledPasswordResetNotifier
+} from "./features/auth/password-reset.notifier.js";
+import { MongoosePasswordResetRepository } from "./features/auth/password-reset.repository.js";
+import { PasswordResetService } from "./features/auth/password-reset.service.js";
 import { MongooseSessionRepository } from "./features/auth/session.repository.js";
 import { SessionService } from "./features/auth/session.service.js";
+import { SesPasswordResetNotifier } from "./features/auth/ses-password-reset.notifier.js";
 import { MongooseUserRepository } from "./features/auth/user.repository.js";
 import { MongooseFormRepository } from "./features/forms/form.repository.js";
 import { createFormRouter } from "./features/forms/form.routes.js";
@@ -30,10 +36,20 @@ export type AppOptions = {
 const clientDistPath = fileURLToPath(new URL("../../client/dist", import.meta.url));
 
 function createDefaultServices(): AppServices {
+  const passwordResetNotifier = env.PASSWORD_RESET_FROM_EMAIL
+    ? new SesPasswordResetNotifier(env.PASSWORD_RESET_FROM_EMAIL)
+    : new DisabledPasswordResetNotifier();
+
   return {
     auth: new AuthService(
       new MongooseUserRepository(),
-      new SessionService(new MongooseSessionRepository())
+      new SessionService(new MongooseSessionRepository()),
+      new PasswordResetService(
+        new MongoosePasswordResetRepository(),
+        passwordResetNotifier,
+        env.PUBLIC_APP_ORIGIN,
+        env.PASSWORD_RESET_TTL_MINUTES
+      )
     ),
     forms: new FormService(new MongooseFormRepository())
   };

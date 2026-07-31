@@ -38,7 +38,8 @@ flowchart LR
 
 ### MongoDB
 
-- Stores users, hashed session tokens with TTL expiry, and bounded form definitions.
+- Stores users, hashed session and password-reset tokens with TTL expiry, and
+  bounded form definitions.
 - Stores unbounded submissions separately from forms.
 - Uses indexes for owner dashboards, public slugs, and chronological response queries.
 
@@ -63,6 +64,9 @@ flowchart LR
 - Authentication establishes identity; authorization is checked per resource.
 - Session cookies contain high-entropy opaque tokens; only SHA-256 token digests
   are stored in MongoDB, allowing logout and server-side revocation.
+- Password-reset requests return the same response for known and unknown email
+  addresses. Reset tokens are random, stored only as SHA-256 digests, expire,
+  are consumed once, and revoke all existing sessions after a password change.
 - Ownership is included in MongoDB read, update, and delete filters. An inaccessible
   resource returns `404` so its existence is not disclosed.
 - Public slugs identify published forms but do not grant owner access.
@@ -81,6 +85,7 @@ flowchart TB
     DNS["DNS and TLS"] --> LB["Application load balancer"]
     LB --> Service["Containerized Node.js service"]
     Service --> Atlas["MongoDB Atlas"]
+    Service --> Email["Amazon SES"]
     Service --> Logs["CloudWatch logs and alarms"]
     CI["GitHub Actions with AWS OIDC"] --> Registry["Private ECR repository"]
     Registry --> Service
@@ -93,6 +98,10 @@ The AWS deployment path assumes a narrowly scoped role through OIDC, pushes an
 immutable commit-SHA image to ECR, and deploys that exact artifact rather than
 rebuilding source independently. Runtime secrets are resolved by the ECS task
 execution role from SSM Parameter Store.
+
+Password-reset delivery is behind a notifier interface. The production adapter
+uses the ECS application task role to call Amazon SES from one verified sender;
+the domain service remains independent of AWS.
 
 ECS Express Mode is the preferred first AWS runtime because it provides a real
 Fargate and Application Load Balancer deployment while reducing undifferentiated

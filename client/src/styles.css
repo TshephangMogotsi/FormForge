@@ -392,6 +392,7 @@ a {
 }
 
 .auth-error,
+.auth-notice,
 .dashboard-error {
   border: 1px solid #edcec9;
   border-radius: 9px;
@@ -401,17 +402,34 @@ a {
   font-size: 12px;
 }
 
+.auth-notice {
+  border: 1px solid #c7dccd;
+  border-radius: 9px;
+  color: var(--brand-dark);
+  background: #f1f8f3;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .auth-submit {
   width: 100%;
   margin-top: 4px;
 }
 
 .auth-switch {
-  margin-top: 22px;
   color: var(--brand);
   font-size: 12px;
   font-weight: 700;
   text-align: center;
+}
+
+.auth-secondary-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: 22px;
 }
 
 .dashboard-error {

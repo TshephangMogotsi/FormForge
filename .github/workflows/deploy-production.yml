@@ -46,17 +46,21 @@ jobs:
           cluster: ${{ vars.ECS_CLUSTER }}
           image: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:sha-${{ github.sha }}
           execution-role-arn: ${{ vars.ECS_TASK_EXECUTION_ROLE_ARN }}
+          task-role-arn: ${{ vars.ECS_APPLICATION_TASK_ROLE_ARN }}
           infrastructure-role-arn: ${{ vars.ECS_EXPRESS_INFRASTRUCTURE_ROLE_ARN }}
           container-port: "4000"
           environment-variables: |
             [
               {"name":"NODE_ENV","value":"production"},
               {"name":"PORT","value":"4000"},
-              {"name":"SESSION_TTL_HOURS","value":"12"}
+              {"name":"SESSION_TTL_HOURS","value":"12"},
+              {"name":"PASSWORD_RESET_TTL_MINUTES","value":"30"},
+              {"name":"PUBLIC_APP_ORIGIN","value":"${{ vars.PUBLIC_APP_ORIGIN }}"}
             ]
           secrets: |
             [
-              {"name":"MONGODB_URI","valueFrom":"/formforge/production/mongodb-uri"}
+              {"name":"MONGODB_URI","valueFrom":"/formforge/production/mongodb-uri"},
+              {"name":"PASSWORD_RESET_FROM_EMAIL","valueFrom":"/formforge/production/password-reset-from-email"}
             ]
           cpu: "256"
           memory: "512"

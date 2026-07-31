@@ -38,4 +38,8 @@ export class SessionService {
   async revoke(token: string): Promise<void> {
     await this.sessions.deleteByTokenHash(hashToken(token));
   }
+
+  async revokeAll(userId: string): Promise<void> {
+    await this.sessions.deleteByUserId(userId);
+  }
 }

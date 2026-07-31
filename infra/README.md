@@ -12,7 +12,8 @@ can be reviewed before any continuously billed runtime is created.
 - a GitHub OIDC provider;
 - a GitHub deployment role restricted to this repository's immutable owner and
   repository identity on `main`;
-- the execution and infrastructure roles required by ECS Express Mode.
+- the execution, application, and infrastructure roles required by ECS Express
+  Mode and password-reset delivery.
 
 It does **not** create ECS tasks, a load balancer, a NAT gateway, or any other
 running compute. The ECR repository can incur small storage charges after
@@ -48,13 +49,23 @@ stored as repository variables, not hard-coded in the workflow.
 | `ECS_CLUSTER` | `ApplicationClusterName` |
 | `AWS_DEPLOY_ROLE_ARN` | `GitHubDeploymentRoleArn` |
 | `ECS_TASK_EXECUTION_ROLE_ARN` | `TaskExecutionRoleArn` |
+| `ECS_APPLICATION_TASK_ROLE_ARN` | `ApplicationTaskRoleArn` |
 | `ECS_EXPRESS_INFRASTRUCTURE_ROLE_ARN` | `ExpressInfrastructureRoleArn` |
+| `PUBLIC_APP_ORIGIN` | Trusted production HTTPS origin |
 
 ## Runtime secret
 
 The Atlas URI belongs in an SSM Parameter Store `SecureString` named
 `/formforge/production/mongodb-uri`. The task execution role can read only
 parameters below `/formforge/production/`.
+
+The verified Amazon SES sender belongs in
+`/formforge/production/password-reset-from-email`. Deploy the foundation with
+the same value in the `PasswordResetSenderEmail` parameter so the application
+task role can send only from that identity.
+
+Amazon SES sandbox accounts can deliver only to verified recipients. Request
+production access before enabling password recovery for general public users.
 
 Enter the value through a private terminal prompt or the AWS console. Do not put
 it in a shell command, commit, issue, screenshot, GitHub variable, or Actions

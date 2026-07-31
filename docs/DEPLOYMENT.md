@@ -47,11 +47,20 @@ limited to:
 
 - publishing images to the FormForge ECR repository;
 - creating or updating the ECS Express service;
-- passing the dedicated ECS execution and infrastructure roles.
+- passing the dedicated ECS execution, application, and infrastructure roles.
 
 The production Atlas URI is supplied to ECS from the SSM Parameter Store
 `SecureString` `/formforge/production/mongodb-uri`. It is never stored in the
 repository or GitHub.
+
+The verified Amazon SES sender is supplied from
+`/formforge/production/password-reset-from-email`. The application task role
+can send only from that SES identity; the task execution role reads the
+configuration value without exposing it in the container definition.
+
+New SES accounts begin in the sandbox. While sandboxed, reset messages can be
+sent only to verified recipient identities. Request SES production access
+before treating password recovery as generally available to public users.
 
 Production deployment is a separate, manually triggered GitHub workflow. It
 selects the immutable image for the chosen `main` commit, deploys it to ECS
@@ -69,8 +78,11 @@ repository's `.env` file.
 | `NODE_ENV=production` | Enables secure cookies, trusted proxy handling, and static client serving |
 | `PORT` | Port assigned by the hosting platform |
 | `CLIENT_ORIGIN` | Allowed Vite origin during local development; production CORS is disabled |
+| `PUBLIC_APP_ORIGIN` | Trusted origin used to build password-reset links |
 | `MONGODB_URI` | Atlas connection string for the production database user |
 | `SESSION_TTL_HOURS` | Server-side and cookie session lifetime |
+| `PASSWORD_RESET_TTL_MINUTES` | Single-use reset-link lifetime |
+| `PASSWORD_RESET_FROM_EMAIL` | Verified Amazon SES sender |
 
 ## Launch gate
 
@@ -81,6 +93,8 @@ Before exposing the service:
 - allow only the API infrastructure's stable outbound address in Atlas;
 - confirm the ECS and load-balancer credit consumption before creating them;
 - verify registration, login, logout, form creation, and session restoration;
+- verify password-reset delivery, token expiry, one-time consumption, and
+  session revocation;
 - verify `/api/health` from outside the hosting network;
 - protect `main` so verification must pass before merge;
 - retain the preceding container SHA for rollback.

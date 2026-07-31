@@ -16,6 +16,7 @@
 - [x] Add protected form CRUD endpoints with ownership checks.
 - [x] Connect the dashboard to live form data.
 - [x] Add request validation, structured logs, and auth-focused integration tests.
+- [x] Add password confirmation and secure single-use password recovery.
 
 ## Phase 3 — Builder persistence
 
@@ -53,8 +54,9 @@
 - [x] Document and codify the AWS registry, OIDC, IAM, and managed-secret
   foundation for an ECS reference deployment.
 - [ ] Resolve the production Atlas network-access boundary.
-- [ ] Deploy the ECS runtime and verify CloudWatch logs and health checks.
-- [ ] Add a rollback-aware deployment workflow and operational runbook.
+- [x] Deploy the ECS runtime and verify CloudWatch logs and health checks.
+- [x] Add a rollback-aware deployment workflow.
+- [ ] Add an operational runbook.
 
 ## Optional differentiator after the core is complete
 

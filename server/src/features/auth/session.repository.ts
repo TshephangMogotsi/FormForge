@@ -10,6 +10,7 @@ export interface SessionRepository {
   create(session: SessionRecord): Promise<void>;
   findByTokenHash(tokenHash: string): Promise<SessionRecord | null>;
   deleteByTokenHash(tokenHash: string): Promise<void>;
+  deleteByUserId(userId: string): Promise<void>;
 }
 
 export class MongooseSessionRepository implements SessionRepository {
@@ -30,5 +31,9 @@ export class MongooseSessionRepository implements SessionRepository {
 
   async deleteByTokenHash(tokenHash: string): Promise<void> {
     await SessionModel.deleteOne({ tokenHash }).exec();
+  }
+
+  async deleteByUserId(userId: string): Promise<void> {
+    await SessionModel.deleteMany({ userId }).exec();
   }
 }

@@ -29,11 +29,19 @@ All errors include a correlation ID:
 
 - `POST /api/v1/auth/register` — creates a user and opaque session cookie.
 - `POST /api/v1/auth/login` — verifies credentials and creates a new session.
+- `POST /api/v1/auth/forgot-password` — accepts an email and always returns the
+  same `202` response, whether or not the account exists.
+- `POST /api/v1/auth/reset-password` — consumes a single-use reset token,
+  changes the password, and revokes every existing session.
 - `POST /api/v1/auth/logout` — revokes the current session and clears its cookie.
 - `GET /api/v1/auth/me` — returns the current public user.
 
 Passwords are never returned. The session cookie is HTTP-only, SameSite `Lax`,
 and `Secure` in production.
+
+Registration and password reset both require `password` and `confirmPassword`.
+Reset tokens expire after 30 minutes by default. Only their SHA-256 digests are
+stored, and consuming a token atomically deletes it.
 
 ## Forms
 
