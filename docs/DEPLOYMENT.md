@@ -23,8 +23,12 @@ The container:
 2. Type-check both workspaces.
 3. Run the API test suite.
 4. Build the server and client production artifacts.
-5. On a successful push to `main`, build and publish a container to GHCR with
-   immutable commit-SHA and moving `latest` tags.
+5. On a successful push to `main`, assume the AWS deployment role through OIDC.
+6. Build once and publish the container to GHCR with the full commit-SHA and
+   moving `latest` tags.
+7. Copy a missing commit-SHA release into immutable private ECR. A workflow
+   re-run detects and reuses an existing release instead of trying to overwrite
+   it.
 
 The hosting platform should deploy an immutable `sha-*` image after it passes
 the health check. Rollback means selecting the previous known-good SHA rather

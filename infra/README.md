@@ -39,6 +39,14 @@ aws cloudformation deploy \
 The stack outputs provide the values needed by GitHub Actions. They should be
 stored as repository variables, not hard-coded in the workflow.
 
+| Repository variable | Source |
+| --- | --- |
+| `AWS_REGION` | Deployment region, currently `eu-west-1` |
+| `ECR_REPOSITORY` | `ContainerRepositoryName` |
+| `AWS_DEPLOY_ROLE_ARN` | `GitHubDeploymentRoleArn` |
+| `ECS_TASK_EXECUTION_ROLE_ARN` | `TaskExecutionRoleArn` |
+| `ECS_EXPRESS_INFRASTRUCTURE_ROLE_ARN` | `ExpressInfrastructureRoleArn` |
+
 ## Runtime secret
 
 The Atlas URI belongs in an SSM Parameter Store `SecureString` named
