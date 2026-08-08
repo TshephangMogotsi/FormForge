@@ -6,3 +6,5 @@ coverage
 *.log
 client/dist
 server/dist
+client/playwright-report
+client/test-results

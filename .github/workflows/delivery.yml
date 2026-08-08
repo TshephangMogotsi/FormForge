@@ -34,6 +34,9 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
+      - name: Install the Chromium test browser
+        run: npx playwright install --with-deps chromium
+
       - name: Type-check workspaces
         run: npm run typecheck
 
@@ -123,3 +126,111 @@ jobs:
           docker buildx imagetools create \
             --tag "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
             "$GHCR_IMAGE:$IMAGE_TAG"
+
+  preview:
+    name: Deploy pull request preview
+    needs: verify
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: preview
+      url: ${{ steps.endpoint.outputs.url }}
+
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@v6
+
+      - name: Prepare preview names
+        run: |
+          echo "IMAGE_TAG=pr-${{ github.event.number }}-${GITHUB_SHA}" >> "$GITHUB_ENV"
+          echo "SERVICE_NAME=formforge-pr-${{ github.event.number }}" >> "$GITHUB_ENV"
+          echo "DATABASE_NAME=formforge_preview_pr_${{ github.event.number }}" >> "$GITHUB_ENV"
+
+      - name: Assume the isolated AWS preview role
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_PREVIEW_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build and publish the preview image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy the pull request service
+        id: deploy
+        uses: aws-actions/amazon-ecs-deploy-express-service@v1
+        with:
+          service-name: ${{ env.SERVICE_NAME }}
+          cluster: ${{ vars.ECS_CLUSTER }}
+          image: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+          execution-role-arn: ${{ vars.ECS_PREVIEW_TASK_EXECUTION_ROLE_ARN }}
+          task-role-arn: ${{ vars.ECS_PREVIEW_APPLICATION_TASK_ROLE_ARN }}
+          infrastructure-role-arn: ${{ vars.ECS_EXPRESS_INFRASTRUCTURE_ROLE_ARN }}
+          container-port: "4000"
+          environment-variables: |
+            [
+              {"name":"NODE_ENV","value":"production"},
+              {"name":"PORT","value":"4000"},
+              {"name":"SESSION_TTL_HOURS","value":"12"},
+              {"name":"PASSWORD_RESET_TTL_MINUTES","value":"30"},
+              {"name":"PUBLIC_APP_ORIGIN","value":"https://preview.invalid"},
+              {"name":"MONGODB_DATABASE","value":"${{ env.DATABASE_NAME }}"}
+            ]
+          secrets: |
+            [
+              {"name":"MONGODB_URI","valueFrom":"/formforge/preview/mongodb-uri"}
+            ]
+          cpu: "256"
+          memory: "512"
+          health-check-path: /api/health
+          min-task-count: "1"
+          max-task-count: "1"
+          tags: |
+            [
+              {"key":"Application","value":"formforge"},
+              {"key":"Environment","value":"preview"},
+              {"key":"PullRequest","value":"${{ github.event.number }}"},
+              {"key":"ManagedBy","value":"GitHubActions"}
+            ]
+          mutate-tags-on-update: "true"
+
+      - name: Normalize the preview endpoint
+        id: endpoint
+        env:
+          RAW_ENDPOINT: ${{ steps.deploy.outputs.endpoint }}
+        run: |
+          case "$RAW_ENDPOINT" in
+            http://*|https://*) ENDPOINT="$RAW_ENDPOINT" ;;
+            *) ENDPOINT="https://$RAW_ENDPOINT" ;;
+          esac
+          echo "url=$ENDPOINT" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke-test the preview
+        env:
+          ENDPOINT: ${{ steps.endpoint.outputs.url }}
+        run: |
+          curl --fail --show-error \
+            --retry 10 \
+            --retry-delay 3 \
+            --retry-all-errors \
+            "$ENDPOINT/api/health"
+
+      - name: Publish the preview endpoint
+        env:
+          ENDPOINT: ${{ steps.endpoint.outputs.url }}
+        run: echo "Pull request preview — $ENDPOINT" >> "$GITHUB_STEP_SUMMARY"

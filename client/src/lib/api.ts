@@ -66,6 +66,22 @@ export type SubmissionAnalytics = {
   }>;
 };
 
+export type WorkspaceAnalytics = {
+  totalForms: number;
+  publishedForms: number;
+  totalResponses: number;
+  last7DaysResponses: number;
+  trend: Array<{ date: string; count: number }>;
+  forms: Array<{
+    formId: string;
+    title: string;
+    status: "draft" | "published";
+    publishedVersion: number;
+    totalResponses: number;
+    last7DaysResponses: number;
+  }>;
+};
+
 type ApiErrorBody = {
   error?: {
     code?: string;
@@ -191,6 +207,10 @@ export const api = {
     return response.data.form;
   },
 
+  deleteForm(formId: string) {
+    return apiRequest<void>(`/api/v1/forms/${formId}`, { method: "DELETE" });
+  },
+
   async getForm(formId: string) {
     const response = await apiRequest<{ data: { form: FormSummary } }>(
       `/api/v1/forms/${formId}`
@@ -252,6 +272,13 @@ export const api = {
   async getFormAnalytics(formId: string) {
     const response = await apiRequest<{ data: { analytics: SubmissionAnalytics } }>(
       `/api/v1/forms/${formId}/analytics`
+    );
+    return response.data.analytics;
+  },
+
+  async getWorkspaceAnalytics() {
+    const response = await apiRequest<{ data: { analytics: WorkspaceAnalytics } }>(
+      "/api/v1/forms/analytics"
     );
     return response.data.analytics;
   }

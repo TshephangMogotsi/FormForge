@@ -67,6 +67,22 @@ export type SubmissionAnalyticsCounts = {
   options: Array<{ fieldId: string; value: string; count: number }>;
 };
 
+export type OwnerAnalyticsCounts = {
+  totalForms: number;
+  publishedForms: number;
+  total: number;
+  sinceTotal: number;
+  trend: Array<{ date: string; count: number }>;
+  forms: Array<{
+    formId: string;
+    title: string;
+    status: FormStatus;
+    publishedVersion: number;
+    total: number;
+    sinceTotal: number;
+  }>;
+};
+
 export interface FormRepository {
   create(input: CreateFormRecord): Promise<FormRecord>;
   listByOwner(ownerId: string, page: number, limit: number): Promise<FormPage>;
@@ -92,6 +108,7 @@ export interface FormRepository {
     since: Date,
     selectFieldIds: string[]
   ): Promise<SubmissionAnalyticsCounts>;
+  getOwnerAnalytics(ownerId: string, since: Date): Promise<OwnerAnalyticsCounts>;
   deleteByOwnerAndId(ownerId: string, formId: string): Promise<boolean>;
 }
 
@@ -373,6 +390,82 @@ export class MongooseFormRepository implements FormRepository {
         value: row._id.value,
         count: row.count
       }))
+    };
+  }
+
+  async getOwnerAnalytics(ownerId: string, since: Date): Promise<OwnerAnalyticsCounts> {
+    const forms = await FormModel.find({ ownerId })
+      .select({ _id: 1, title: 1, status: 1, publishedVersion: 1, updatedAt: 1 })
+      .sort({ updatedAt: -1 })
+      .lean()
+      .exec();
+    const formIds = forms.map((form) => form._id);
+
+    const [counts = { perForm: [], trend: [] }] = formIds.length
+      ? await SubmissionModel.aggregate<{
+          perForm: Array<{
+            _id: mongoose.Types.ObjectId;
+            total: number;
+            sinceTotal: number;
+          }>;
+          trend: Array<{ _id: string; count: number }>;
+        }>([
+          { $match: { formId: { $in: formIds } } },
+          {
+            $facet: {
+              perForm: [
+                {
+                  $group: {
+                    _id: "$formId",
+                    total: { $sum: 1 },
+                    sinceTotal: {
+                      $sum: { $cond: [{ $gte: ["$createdAt", since] }, 1, 0] }
+                    }
+                  }
+                }
+              ],
+              trend: [
+                { $match: { createdAt: { $gte: since } } },
+                {
+                  $group: {
+                    _id: {
+                      $dateToString: {
+                        format: "%Y-%m-%d",
+                        date: "$createdAt",
+                        timezone: "UTC"
+                      }
+                    },
+                    count: { $sum: 1 }
+                  }
+                },
+                { $sort: { _id: 1 } }
+              ]
+            }
+          }
+        ]).exec()
+      : [];
+    const countsByForm = new Map(
+      counts.perForm.map((entry) => [entry._id.toString(), entry])
+    );
+    const formCounts = forms.map((form) => {
+      const count = countsByForm.get(form._id.toString());
+      return {
+        formId: form._id.toString(),
+        title: form.title,
+        status: form.status,
+        publishedVersion: form.publishedVersion ?? 0,
+        total: count?.total ?? 0,
+        sinceTotal: count?.sinceTotal ?? 0
+      };
+    });
+
+    return {
+      totalForms: forms.length,
+      publishedForms: forms.filter((form) => form.status === "published").length,
+      total: formCounts.reduce((sum, form) => sum + form.total, 0),
+      sinceTotal: formCounts.reduce((sum, form) => sum + form.sinceTotal, 0),
+      trend: counts.trend.map((entry) => ({ date: entry._id, count: entry.count })),
+      forms: formCounts
     };
   }
 

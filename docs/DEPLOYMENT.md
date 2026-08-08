@@ -34,6 +34,25 @@ The hosting platform should deploy an immutable `sha-*` image after it passes
 the health check. Rollback means selecting the previous known-good SHA rather
 than rebuilding old source.
 
+## Pull request previews
+
+An in-repository pull request receives an ephemeral ECS Express service after
+the same type-check, API test, browser test, and production-build gate passes.
+Each preview:
+
+- uses an immutable `pr-<number>-<commit>` ECR image;
+- runs as `formforge-pr-<number>` with one task and no autoscaling;
+- reads only `/formforge/preview/*` SSM parameters;
+- uses a PR-specific MongoDB database name rather than production data;
+- runs without the production SES permission; and
+- is deleted, together with its managed load balancer, when the PR closes.
+
+The preview deployment role is trusted only by the GitHub `preview`
+environment. Configure that environment with appropriate branch restrictions or
+required reviewers. Preview services create billable Fargate and load-balancer
+resources, so stale PRs should be closed promptly even though the cleanup
+workflow is automatic.
+
 ## AWS delivery foundation
 
 The AWS reference deployment uses ECS Express Mode in `eu-west-1`. The
@@ -97,6 +116,7 @@ repository's `.env` file.
 | `CLIENT_ORIGIN` | Allowed Vite origin during local development; production CORS is disabled |
 | `PUBLIC_APP_ORIGIN` | Trusted origin used to build password-reset links |
 | `MONGODB_URI` | Atlas connection string for the production database user |
+| `MONGODB_DATABASE` | Optional logical database override used for PR isolation |
 | `SESSION_TTL_HOURS` | Server-side and cookie session lifetime |
 | `PASSWORD_RESET_TTL_MINUTES` | Single-use reset-link lifetime |
 | `PASSWORD_RESET_FROM_EMAIL` | Verified Amazon SES sender |

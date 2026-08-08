@@ -2,17 +2,18 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import {
   BarChart3,
   Blocks,
-  ChevronRight,
-  Copy,
   FileText,
   LayoutDashboard,
   LoaderCircle,
   LogOut,
-  Plus,
-  Settings,
-  Sparkles
+  Settings
 } from "lucide-react";
 import { AuthPage } from "./features/auth/AuthPage";
+import {
+  DashboardPage,
+  type PendingFormAction
+} from "./features/dashboard/DashboardPage";
+import { AnalyticsOverviewPage } from "./features/responses/AnalyticsOverviewPage";
 import { api, type FormSummary, type User } from "./lib/api";
 
 const BuilderPage = lazy(() =>
@@ -29,7 +30,11 @@ const publicFormSlug = window.location.pathname.match(
   /^\/f\/([a-z0-9]+(?:-[a-z0-9]+)*)\/?$/
 )?.[1] ?? null;
 
-type View = "dashboard" | "builder" | "responses";
+type View = "dashboard" | "builder" | "analytics";
+
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
 
 function initials(name: string) {
   return name
@@ -45,15 +50,13 @@ function AppShell({
   view,
   user,
   onNavigate,
-  onLogout,
-  hasActiveForm
+  onLogout
 }: {
   children: React.ReactNode;
   view: View;
   user: User;
   onNavigate: (view: View) => void;
   onLogout: () => void;
-  hasActiveForm: boolean;
 }) {
   const isBuilder = view === "builder";
 
@@ -85,10 +88,9 @@ function AppShell({
             Forms
           </button>
           <button
-            className={view === "responses" ? "nav-item active button-reset" : "nav-item button-reset"}
+            className={view === "analytics" ? "nav-item active button-reset" : "nav-item button-reset"}
             type="button"
-            disabled={!hasActiveForm}
-            onClick={() => onNavigate("responses")}
+            onClick={() => onNavigate("analytics")}
           >
             <BarChart3 size={18} />
             Analytics
@@ -117,132 +119,6 @@ function AppShell({
   );
 }
 
-function DashboardPage({
-  user,
-  forms,
-  loading,
-  creating,
-  duplicatingFormId,
-  error,
-  onCreate,
-  onOpen,
-  onDuplicate
-}: {
-  user: User;
-  forms: FormSummary[];
-  loading: boolean;
-  creating: boolean;
-  duplicatingFormId: string | null;
-  error: string | null;
-  onCreate: () => void;
-  onOpen: (form: FormSummary) => void;
-  onDuplicate: (form: FormSummary) => void;
-}) {
-  return (
-    <div className="dashboard-page">
-      <header className="dashboard-header">
-        <div>
-          <span className="eyebrow">Your workspace</span>
-          <h1>Good to see you, {user.name.split(" ")[0]}.</h1>
-          <p>Build something worth responding to.</p>
-        </div>
-        <button className="primary-button" type="button" onClick={onCreate} disabled={creating}>
-          {creating ? <LoaderCircle className="spin" size={18} /> : <Plus size={18} />}
-          {creating ? "Creating…" : "New form"}
-        </button>
-      </header>
-
-      {error && (
-        <div className="dashboard-error" role="alert">
-          {error}
-        </div>
-      )}
-
-      <section className="metric-grid" aria-label="Workspace overview">
-        <article className="metric-card">
-          <span className="metric-label">Total forms</span>
-          <strong>{forms.length}</strong>
-          <small>{forms.length ? "Across drafts and published forms" : "Your first form starts here"}</small>
-        </article>
-        <article className="metric-card">
-          <span className="metric-label">Published forms</span>
-          <strong>{forms.filter((form) => form.status === "published").length}</strong>
-          <small>Live and ready to collect responses</small>
-        </article>
-        <article className="metric-card accent-card">
-          <span className="sparkle-badge">
-            <Sparkles size={15} /> Quick start
-          </span>
-          <strong>Build in minutes</strong>
-          <small>Drag, configure, publish.</small>
-        </article>
-      </section>
-
-      <section className="forms-section">
-        <div className="section-heading">
-          <div>
-            <h2>Recent forms</h2>
-            <p>Your drafts and published forms appear here.</p>
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="forms-loading" aria-live="polite">
-            <LoaderCircle className="spin" size={20} /> Loading your forms…
-          </div>
-        ) : forms.length ? (
-          <div className="form-card-grid">
-            {forms.map((form) => (
-              <article className="form-card" key={form.id}>
-                <button
-                  className="form-card-open button-reset"
-                  type="button"
-                  onClick={() => onOpen(form)}
-                >
-                  <span className="empty-icon">
-                    <FileText size={22} />
-                  </span>
-                  <span className="form-card-copy">
-                    <strong>{form.title}</strong>
-                    <small>{form.description || "No description yet"}</small>
-                  </span>
-                  <span className={`status-pill ${form.status}`}>{form.status}</span>
-                  <ChevronRight size={17} />
-                </button>
-                <button
-                  className="icon-button form-card-action"
-                  type="button"
-                  aria-label={`Duplicate ${form.title}`}
-                  title="Duplicate form"
-                  disabled={duplicatingFormId === form.id}
-                  onClick={() => onDuplicate(form)}
-                >
-                  {duplicatingFormId === form.id ? (
-                    <LoaderCircle className="spin" size={17} />
-                  ) : (
-                    <Copy size={17} />
-                  )}
-                </button>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <button className="empty-state empty-state-button" type="button" onClick={onCreate}>
-            <span className="empty-icon">
-              <FileText size={28} />
-            </span>
-            <h3>Create your first form</h3>
-            <p>Add fields, shape the experience, and share it with the world.</p>
-            <span className="text-link">
-              Open the builder <ChevronRight size={16} />
-            </span>
-          </button>
-        )}
-      </section>
-    </div>
-  );
-}
-
 function AppLoading() {
   return (
     <main className="app-loading" aria-live="polite">
@@ -262,9 +138,11 @@ export default function App() {
   const [forms, setForms] = useState<FormSummary[]>([]);
   const [formsLoading, setFormsLoading] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [duplicatingFormId, setDuplicatingFormId] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingFormAction>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [activeForm, setActiveForm] = useState<FormSummary | null>(null);
+  const [analyticsForm, setAnalyticsForm] = useState<FormSummary | null>(null);
 
   useEffect(() => {
     if (publicFormSlug) return;
@@ -295,32 +173,85 @@ export default function App() {
   async function handleCreate() {
     setCreating(true);
     setError(null);
+    setNotice(null);
     try {
       const form = await api.createForm({ title: "Untitled form" });
       setForms((current) => [form, ...current]);
       setActiveForm(form);
       setView("builder");
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "The form could not be created.");
+      setError(errorMessage(caughtError, "The form could not be created."));
     } finally {
       setCreating(false);
     }
   }
 
   async function handleDuplicate(form: FormSummary) {
-    setDuplicatingFormId(form.id);
+    setPendingAction({ formId: form.id, action: "duplicate" });
     setError(null);
+    setNotice(null);
     try {
       const duplicate = await api.duplicateForm(form.id);
       setForms((current) => [duplicate, ...current]);
+      setNotice(`Duplicated “${form.title}” as “${duplicate.title}”.`);
     } catch (caughtError) {
-      setError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "The form could not be duplicated."
-      );
+      setError(errorMessage(caughtError, "The form could not be duplicated."));
     } finally {
-      setDuplicatingFormId(null);
+      setPendingAction(null);
+    }
+  }
+
+  async function handleRename(form: FormSummary, title: string) {
+    setPendingAction({ formId: form.id, action: "rename" });
+    setError(null);
+    setNotice(null);
+    try {
+      const renamed = await api.updateForm(form.id, { title });
+      setForms((current) =>
+        current.map((candidate) => (candidate.id === renamed.id ? renamed : candidate))
+      );
+      setActiveForm((current) => (current?.id === renamed.id ? renamed : current));
+      setAnalyticsForm((current) => (current?.id === renamed.id ? renamed : current));
+      setNotice(`Renamed “${form.title}” to “${renamed.title}”.`);
+    } catch (caughtError) {
+      setError(errorMessage(caughtError, "The form could not be renamed."));
+      throw caughtError;
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  async function handleDelete(form: FormSummary) {
+    setPendingAction({ formId: form.id, action: "delete" });
+    setError(null);
+    setNotice(null);
+    try {
+      await api.deleteForm(form.id);
+      setForms((current) => current.filter((candidate) => candidate.id !== form.id));
+      if (activeForm?.id === form.id) setActiveForm(null);
+      if (analyticsForm?.id === form.id) setAnalyticsForm(null);
+      setNotice(`Deleted “${form.title}”.`);
+    } catch (caughtError) {
+      setError(errorMessage(caughtError, "The form could not be deleted."));
+      throw caughtError;
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  async function handleCopyPublicLink(form: FormSummary) {
+    if (!form.slug) return;
+    setPendingAction({ formId: form.id, action: "copy-link" });
+    setError(null);
+    setNotice(null);
+    try {
+      const publicUrl = new URL(`/f/${form.slug}`, window.location.origin).toString();
+      await navigator.clipboard.writeText(publicUrl);
+      setNotice(`Copied the public link for “${form.title}”.`);
+    } catch (caughtError) {
+      setError(errorMessage(caughtError, "The public link could not be copied."));
+    } finally {
+      setPendingAction(null);
     }
   }
 
@@ -330,6 +261,28 @@ export default function App() {
     } finally {
       setUser(null);
       setActiveForm(null);
+      setAnalyticsForm(null);
+      setNotice(null);
+      setView("dashboard");
+    }
+  }
+
+  function handleNavigate(nextView: View) {
+    if (nextView === "analytics") setAnalyticsForm(null);
+    setView(nextView);
+  }
+
+  async function handleSelectAnalyticsForm(formId: string) {
+    const loadedForm = forms.find((form) => form.id === formId);
+    if (loadedForm) {
+      setAnalyticsForm(loadedForm);
+      return;
+    }
+
+    try {
+      setAnalyticsForm(await api.getForm(formId));
+    } catch (caughtError) {
+      setError(errorMessage(caughtError, "The selected form could not be loaded."));
       setView("dashboard");
     }
   }
@@ -357,47 +310,71 @@ export default function App() {
     <AppShell
       view={view}
       user={user}
-      onNavigate={setView}
+      onNavigate={handleNavigate}
       onLogout={handleLogout}
-      hasActiveForm={Boolean(activeForm)}
     >
-      {view === "dashboard" || !activeForm ? (
+      {view === "dashboard" || (view === "builder" && !activeForm) ? (
         <DashboardPage
           user={user}
           forms={forms}
           loading={formsLoading}
           creating={creating}
-          duplicatingFormId={duplicatingFormId}
+          pendingAction={pendingAction}
           error={error}
+          notice={notice}
           onCreate={handleCreate}
           onDuplicate={handleDuplicate}
+          onRename={handleRename}
+          onDelete={handleDelete}
+          onCopyPublicLink={handleCopyPublicLink}
+          onOpenPublished={(form) => {
+            if (!form.slug) return;
+            window.open(`/f/${form.slug}`, "_blank", "noopener,noreferrer");
+          }}
+          onViewResponses={(form) => {
+            setAnalyticsForm(form);
+            setView("analytics");
+          }}
           onOpen={(form) => {
             setActiveForm(form);
             setView("builder");
           }}
         />
-      ) : view === "builder" ? (
+      ) : view === "builder" && activeForm ? (
         <Suspense fallback={<AppLoading />}>
           <BuilderPage
             formId={activeForm.id}
             onBack={() => setView("dashboard")}
-            onOpenResponses={() => setView("responses")}
+            onOpenResponses={() => {
+              setAnalyticsForm(activeForm);
+              setView("analytics");
+            }}
             onSaved={(savedForm) => {
               setActiveForm(savedForm);
+              setAnalyticsForm((current) =>
+                current?.id === savedForm.id ? savedForm : current
+              );
               setForms((current) =>
                 current.map((form) => (form.id === savedForm.id ? savedForm : form))
               );
             }}
           />
         </Suspense>
-      ) : (
+      ) : analyticsForm ? (
         <Suspense fallback={<AppLoading />}>
           <ResponsesPage
-            form={activeForm}
-            onBack={() => setView("dashboard")}
-            onEdit={() => setView("builder")}
+            form={analyticsForm}
+            onBack={() => setAnalyticsForm(null)}
+            onEdit={() => {
+              setActiveForm(analyticsForm);
+              setView("builder");
+            }}
           />
         </Suspense>
+      ) : (
+        <AnalyticsOverviewPage
+          onSelectForm={(formId) => void handleSelectAnalyticsForm(formId)}
+        />
       )}
     </AppShell>
   );

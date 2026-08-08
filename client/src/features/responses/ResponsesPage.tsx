@@ -15,6 +15,7 @@ import {
   type StoredSubmission,
   type SubmissionAnalytics
 } from "../../lib/api";
+import { TrendChart } from "./TrendChart";
 
 type SubmissionData = Awaited<ReturnType<typeof api.listSubmissions>>;
 
@@ -73,24 +74,6 @@ function ResponseTable({ data }: { data: SubmissionData }) {
   );
 }
 
-function TrendChart({ analytics }: { analytics: SubmissionAnalytics }) {
-  const maximum = Math.max(1, ...analytics.trend.map((point) => point.count));
-  return (
-    <div className="trend-chart" aria-label="Responses received over the last seven days">
-      {analytics.trend.map((point) => (
-        <div className="trend-column" key={point.date}>
-          <span className="trend-count">{point.count}</span>
-          <span
-            className="trend-bar"
-            style={{ height: `${Math.max(point.count ? 12 : 3, (point.count / maximum) * 100)}%` }}
-          />
-          <small>{new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(new Date(`${point.date}T00:00:00Z`))}</small>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export function ResponsesPage({
   form,
   onBack,
@@ -136,7 +119,7 @@ export function ResponsesPage({
       <header className="responses-header">
         <div>
           <button className="responses-back button-reset" type="button" onClick={onBack}>
-            <ArrowLeft size={16} /> Forms
+            <ArrowLeft size={16} /> All forms
           </button>
           <span className="eyebrow">Response workspace</span>
           <h1>{form.title}</h1>
@@ -160,7 +143,7 @@ export function ResponsesPage({
           <section className="analytics-grid">
             <article className="analytics-card trend-card">
               <div className="analytics-heading"><span><BarChart3 size={17} /> Response trend</span><small>Last 7 days</small></div>
-              <TrendChart analytics={analytics} />
+              <TrendChart trend={analytics.trend} />
             </article>
             <article className="analytics-card distribution-card">
               <div className="analytics-heading"><span>Option distribution</span><small>Published dropdowns</small></div>

@@ -7,7 +7,9 @@ export async function connectDatabase() {
     return;
   }
 
-  await mongoose.connect(env.MONGODB_URI);
+  await mongoose.connect(env.MONGODB_URI, {
+    ...(env.MONGODB_DATABASE ? { dbName: env.MONGODB_DATABASE } : {})
+  });
   console.info("MongoDB connected.");
 }
 

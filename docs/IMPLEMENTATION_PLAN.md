@@ -38,6 +38,7 @@
 
 - [x] Add paginated responses.
 - [x] Add response trends and option distributions.
+- [x] Add owner-wide analytics with direct form-level drill-down.
 - [x] Seed a demo account and realistic form.
 - [x] Finish responsive states and accessibility.
 - [x] Deploy and record the demo workflow.
@@ -48,6 +49,7 @@
 - [x] Add a production Dockerfile for the same-origin application.
 - [ ] Add a local Compose stack with MongoDB.
 - [x] Add CI for types, tests, production builds, and immutable container images.
+- [x] Add browser interaction coverage and isolated pull request preview deployments.
 - [ ] Add dependency-aware readiness checks.
 - [x] Add structured request logging and error correlation IDs.
 - [ ] Test the public form at mobile breakpoints and under network throttling.
