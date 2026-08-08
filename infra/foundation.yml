@@ -349,6 +349,7 @@ Resources:
                   - ecs:DescribeClusters
                   - ecs:DescribeExpressGatewayService
                   - ecs:DescribeServiceDeployments
+                  - ecs:DescribeServiceRevisions
                   - ecs:DescribeServices
                   - ecs:ListServiceDeployments
                   - ecs:RegisterTaskDefinition
