@@ -125,7 +125,7 @@ npm run build
 | Check | Current coverage |
 | --- | --- |
 | Type checking | Client and server TypeScript workspaces |
-| Integration tests | 17 API tests covering auth, isolation, drafts, publishing, submissions, and analytics |
+| Integration tests | 19 API tests covering auth, isolation, drafts, duplication, publishing, submissions, and analytics |
 | Production build | Compiled Express server and code-split Vite client |
 | Container publication | Immutable `sha-<commit>` images in GHCR and private ECR |
 | Production smoke test | External `/api/health` check after ECS service stabilization |

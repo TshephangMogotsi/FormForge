@@ -573,9 +573,14 @@ describe("FormForge API", () => {
 
   it("requires authentication before form access", async () => {
     const response = await request(app).get("/api/v1/forms");
+    const duplication = await request(app).post(
+      "/api/v1/forms/000000000000000000000001/duplicate"
+    );
 
     expect(response.status).toBe(401);
     expect(response.body.error.code).toBe("UNAUTHENTICATED");
+    expect(duplication.status).toBe(401);
+    expect(duplication.body.error.code).toBe("UNAUTHENTICATED");
   });
 
   it("creates, lists, updates, and deletes forms for their owner", async () => {
@@ -631,6 +636,94 @@ describe("FormForge API", () => {
     const deletion = await owner.delete(`/api/v1/forms/${formId}`);
     expect(deletion.status).toBe(204);
     expect((await owner.get("/api/v1/forms")).body.data.forms).toHaveLength(0);
+  });
+
+  it("duplicates an owned form as an unpublished draft with fresh field identifiers", async () => {
+    const owner = request.agent(app);
+    await register(owner, "owner@example.com");
+    const sourceFieldId = "b3b2c1d0-7a6f-4f52-91af-2f2a5cf56e21";
+    const creation = await owner.post("/api/v1/forms").send({
+      title: "Customer feedback",
+      description: "A short customer research survey."
+    });
+    const sourceFormId = creation.body.data.form.id as string;
+    await owner.patch(`/api/v1/forms/${sourceFormId}`).send({
+      fields: [
+        {
+          id: sourceFieldId,
+          type: "shortText",
+          label: "What should we improve?",
+          description: "Share the most important change.",
+          placeholder: "Your suggestion",
+          required: true,
+          options: []
+        }
+      ]
+    });
+    const publication = await owner.post(`/api/v1/forms/${sourceFormId}/publish`);
+    const slug = publication.body.data.publication.slug as string;
+    await request(app)
+      .post(`/api/v1/public/forms/${slug}/submissions`)
+      .send({ answers: [{ fieldId: sourceFieldId, value: "Faster onboarding" }] });
+
+    const duplication = await owner.post(`/api/v1/forms/${sourceFormId}/duplicate`);
+
+    expect(duplication.status).toBe(201);
+    expect(duplication.body.data.form).toMatchObject({
+      ownerId: creation.body.data.form.ownerId,
+      title: "Customer feedback (copy)",
+      description: "A short customer research survey.",
+      status: "draft",
+      slug: null,
+      publishedVersion: 0,
+      publishedAt: null,
+      fields: [
+        {
+          type: "shortText",
+          label: "What should we improve?",
+          description: "Share the most important change.",
+          placeholder: "Your suggestion",
+          required: true,
+          options: []
+        }
+      ]
+    });
+    const duplicate = duplication.body.data.form as FormRecord;
+    expect(duplicate.id).not.toBe(sourceFormId);
+    expect(duplicate.fields[0]?.id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    );
+    expect(duplicate.fields[0]?.id).not.toBe(sourceFieldId);
+
+    const duplicateSubmissions = await owner.get(
+      `/api/v1/forms/${duplicate.id}/submissions`
+    );
+    expect(duplicateSubmissions.body.data.pagination.total).toBe(0);
+    const duplicateAnalytics = await owner.get(`/api/v1/forms/${duplicate.id}/analytics`);
+    expect(duplicateAnalytics.body.data.analytics.totalResponses).toBe(0);
+
+    const sourceSubmissions = await owner.get(
+      `/api/v1/forms/${sourceFormId}/submissions`
+    );
+    expect(sourceSubmissions.body.data.pagination.total).toBe(1);
+  });
+
+  it("does not allow one owner to duplicate another owner's form", async () => {
+    const owner = request.agent(app);
+    const otherOwner = request.agent(app);
+    await register(owner, "owner@example.com");
+    await register(otherOwner, "other@example.com", "Other Owner");
+    const creation = await owner.post("/api/v1/forms").send({ title: "Private form" });
+    const sourceFormId = creation.body.data.form.id as string;
+
+    const duplication = await otherOwner.post(
+      `/api/v1/forms/${sourceFormId}/duplicate`
+    );
+
+    expect(duplication.status).toBe(404);
+    expect(duplication.body.error.code).toBe("FORM_NOT_FOUND");
+    expect((await otherOwner.get("/api/v1/forms")).body.data.forms).toHaveLength(0);
+    expect((await owner.get("/api/v1/forms")).body.data.forms).toHaveLength(1);
   });
 
   it("rejects malformed draft field schemas before persistence", async () => {

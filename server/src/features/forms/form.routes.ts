@@ -44,6 +44,15 @@ export function createFormRouter(authService: AuthService, formService: FormServ
     })
   );
 
+  router.post(
+    "/:formId/duplicate",
+    asyncHandler(async (request, response) => {
+      const formId = formIdSchema.parse(request.params.formId);
+      const form = await formService.duplicate(request.auth!.userId, formId);
+      response.status(201).json({ data: { form } });
+    })
+  );
+
   router.get(
     "/:formId/submissions",
     asyncHandler(async (request, response) => {

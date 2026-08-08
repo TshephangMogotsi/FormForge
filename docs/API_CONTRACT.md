@@ -49,6 +49,7 @@ All form endpoints require authentication.
 
 - `GET /api/v1/forms?page=1&limit=20`
 - `POST /api/v1/forms`
+- `POST /api/v1/forms/:formId/duplicate`
 - `GET /api/v1/forms/:formId`
 - `PATCH /api/v1/forms/:formId`
 - `POST /api/v1/forms/:formId/publish`
@@ -56,8 +57,8 @@ All form endpoints require authentication.
 - `GET /api/v1/forms/:formId/analytics`
 - `DELETE /api/v1/forms/:formId`
 
-List limits are bounded to 50. Read, update, and delete operations scope the
-database query by both `formId` and the authenticated `ownerId`.
+List limits are bounded to 50. Read, duplicate, update, and delete operations
+scope the database query by both `formId` and the authenticated `ownerId`.
 
 Example create request:
 
@@ -72,6 +73,10 @@ Draft fields are embedded in the form and replaced atomically through `PATCH`.
 Each field has a stable client-generated UUID and one of `shortText`, `longText`,
 `number`, `select`, or `checkbox`. A form is limited to 50 fields and a dropdown
 to 20 unique, non-empty options.
+
+Duplicating a form copies its title, description, and fields into a new draft.
+The copied fields receive new UUIDs. Published versions, the public slug,
+submissions, and analytics remain attached only to the source form.
 
 Example draft update:
 
@@ -119,7 +124,3 @@ one answer per stable field ID:
 The API rejects duplicate or unknown field IDs, missing required answers, incorrect
 value types, and dropdown values absent from the published options. Successful
 responses return only a submission ID, form version, and submission timestamp.
-
-## Planned routes
-
-- `POST /api/v1/forms/:formId/duplicate`

@@ -14,6 +14,7 @@
 - [x] Add registration, login, logout, and current-user endpoints.
 - [x] Use revocable Mongo-backed sessions in secure HTTP-only cookies.
 - [x] Add protected form CRUD endpoints with ownership checks.
+- [x] Add owner-scoped form duplication with fresh field identifiers.
 - [x] Connect the dashboard to live form data.
 - [x] Add request validation, structured logs, and auth-focused integration tests.
 - [x] Add password confirmation and secure single-use password recovery.

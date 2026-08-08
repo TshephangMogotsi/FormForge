@@ -3,6 +3,7 @@ import {
   BarChart3,
   Blocks,
   ChevronRight,
+  Copy,
   FileText,
   LayoutDashboard,
   LoaderCircle,
@@ -121,17 +122,21 @@ function DashboardPage({
   forms,
   loading,
   creating,
+  duplicatingFormId,
   error,
   onCreate,
-  onOpen
+  onOpen,
+  onDuplicate
 }: {
   user: User;
   forms: FormSummary[];
   loading: boolean;
   creating: boolean;
+  duplicatingFormId: string | null;
   error: string | null;
   onCreate: () => void;
   onOpen: (form: FormSummary) => void;
+  onDuplicate: (form: FormSummary) => void;
 }) {
   return (
     <div className="dashboard-page">
@@ -188,17 +193,37 @@ function DashboardPage({
         ) : forms.length ? (
           <div className="form-card-grid">
             {forms.map((form) => (
-              <button className="form-card" type="button" key={form.id} onClick={() => onOpen(form)}>
-                <span className="empty-icon">
-                  <FileText size={22} />
-                </span>
-                <span className="form-card-copy">
-                  <strong>{form.title}</strong>
-                  <small>{form.description || "No description yet"}</small>
-                </span>
-                <span className={`status-pill ${form.status}`}>{form.status}</span>
-                <ChevronRight size={17} />
-              </button>
+              <article className="form-card" key={form.id}>
+                <button
+                  className="form-card-open button-reset"
+                  type="button"
+                  onClick={() => onOpen(form)}
+                >
+                  <span className="empty-icon">
+                    <FileText size={22} />
+                  </span>
+                  <span className="form-card-copy">
+                    <strong>{form.title}</strong>
+                    <small>{form.description || "No description yet"}</small>
+                  </span>
+                  <span className={`status-pill ${form.status}`}>{form.status}</span>
+                  <ChevronRight size={17} />
+                </button>
+                <button
+                  className="icon-button form-card-action"
+                  type="button"
+                  aria-label={`Duplicate ${form.title}`}
+                  title="Duplicate form"
+                  disabled={duplicatingFormId === form.id}
+                  onClick={() => onDuplicate(form)}
+                >
+                  {duplicatingFormId === form.id ? (
+                    <LoaderCircle className="spin" size={17} />
+                  ) : (
+                    <Copy size={17} />
+                  )}
+                </button>
+              </article>
             ))}
           </div>
         ) : (
@@ -237,6 +262,7 @@ export default function App() {
   const [forms, setForms] = useState<FormSummary[]>([]);
   const [formsLoading, setFormsLoading] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [duplicatingFormId, setDuplicatingFormId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeForm, setActiveForm] = useState<FormSummary | null>(null);
 
@@ -278,6 +304,23 @@ export default function App() {
       setError(caughtError instanceof Error ? caughtError.message : "The form could not be created.");
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function handleDuplicate(form: FormSummary) {
+    setDuplicatingFormId(form.id);
+    setError(null);
+    try {
+      const duplicate = await api.duplicateForm(form.id);
+      setForms((current) => [duplicate, ...current]);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "The form could not be duplicated."
+      );
+    } finally {
+      setDuplicatingFormId(null);
     }
   }
 
@@ -324,8 +367,10 @@ export default function App() {
           forms={forms}
           loading={formsLoading}
           creating={creating}
+          duplicatingFormId={duplicatingFormId}
           error={error}
           onCreate={handleCreate}
+          onDuplicate={handleDuplicate}
           onOpen={(form) => {
             setActiveForm(form);
             setView("builder");

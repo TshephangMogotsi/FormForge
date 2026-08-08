@@ -183,6 +183,14 @@ export const api = {
     return response.data.form;
   },
 
+  async duplicateForm(formId: string) {
+    const response = await apiRequest<{ data: { form: FormSummary } }>(
+      `/api/v1/forms/${formId}/duplicate`,
+      { method: "POST" }
+    );
+    return response.data.form;
+  },
+
   async getForm(formId: string) {
     const response = await apiRequest<{ data: { form: FormSummary } }>(
       `/api/v1/forms/${formId}`

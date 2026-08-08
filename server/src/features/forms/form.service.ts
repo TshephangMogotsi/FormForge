@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { AppError } from "../../lib/app-error.js";
 import type {
   CreateFormInput,
@@ -26,6 +26,11 @@ function createPublicSlug(title: string) {
     .slice(0, 55) || "form";
 
   return `${prefix}-${randomBytes(4).toString("hex")}`;
+}
+
+function createDuplicateTitle(title: string) {
+  const suffix = " (copy)";
+  return `${title.slice(0, 120 - suffix.length)}${suffix}`;
 }
 
 function validateAnswer(field: FormField, value: SubmissionAnswer["value"]): string | null {
@@ -74,6 +79,24 @@ export class FormService {
     }
 
     return form;
+  }
+
+  async duplicate(ownerId: string, formId: string): Promise<FormRecord> {
+    const source = await this.forms.findByOwnerAndId(ownerId, formId);
+    if (!source) {
+      throw new AppError(404, "FORM_NOT_FOUND", "Form not found.");
+    }
+
+    return this.forms.create({
+      ownerId,
+      title: createDuplicateTitle(source.title),
+      description: source.description,
+      fields: source.fields.map((field) => ({
+        ...field,
+        id: randomUUID(),
+        options: [...field.options]
+      }))
+    });
   }
 
   async update(
