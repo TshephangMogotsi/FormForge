@@ -78,12 +78,17 @@ general API boundary.
 
 ### Response review
 
-1. Owner-scoped response queries paginate newest-first and return only the published
-   field versions needed to label that page accurately.
-2. MongoDB aggregations calculate total responses, a seven-day UTC trend, and
-   dropdown counts without transferring every response into application memory.
-3. The service fills missing trend dates and calculates percentages so the client
-   receives a stable presentation-ready contract.
+1. The analytics landing page requests one workspace overview rather than issuing
+   one analytics request per form.
+2. The repository first selects form IDs by authenticated owner, then aggregates
+   submissions only across that authorized set for workspace totals, a seven-day
+   UTC trend, and per-form response counts.
+3. Form-specific response queries paginate newest-first and return only the
+   published field versions needed to label that page accurately.
+4. Form-specific aggregations calculate dropdown counts without transferring every
+   response into application memory.
+5. The service fills missing trend dates and calculates percentages so the client
+   receives stable presentation-ready contracts.
 
 ## Security boundaries
 
@@ -127,6 +132,11 @@ The AWS deployment path assumes a narrowly scoped role through OIDC, pushes an
 immutable commit-SHA image to ECR, and deploys that exact artifact rather than
 rebuilding source independently. Runtime secrets are resolved by the ECS task
 execution role from SSM Parameter Store.
+
+Pull requests use a separate OIDC role, task roles, SSM path, and logical MongoDB
+database. A PR-scoped ECS service provides a realistic same-origin preview and
+is deleted automatically when the PR closes. Preview tasks have no permission
+to read production parameters or send production email.
 
 The Cloudflare Worker is an edge hostname adapter rather than an application
 service: it applies only to the FormForge subdomain, preserves the request path,

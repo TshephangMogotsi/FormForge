@@ -48,16 +48,27 @@ stored as repository variables, not hard-coded in the workflow.
 | `ECR_REPOSITORY` | `ContainerRepositoryName` |
 | `ECS_CLUSTER` | `ApplicationClusterName` |
 | `AWS_DEPLOY_ROLE_ARN` | `GitHubDeploymentRoleArn` |
+| `AWS_PREVIEW_DEPLOY_ROLE_ARN` | `GitHubPreviewDeploymentRoleArn` |
 | `ECS_TASK_EXECUTION_ROLE_ARN` | `TaskExecutionRoleArn` |
 | `ECS_APPLICATION_TASK_ROLE_ARN` | `ApplicationTaskRoleArn` |
+| `ECS_PREVIEW_TASK_EXECUTION_ROLE_ARN` | `PreviewTaskExecutionRoleArn` |
+| `ECS_PREVIEW_APPLICATION_TASK_ROLE_ARN` | `PreviewApplicationTaskRoleArn` |
 | `ECS_EXPRESS_INFRASTRUCTURE_ROLE_ARN` | `ExpressInfrastructureRoleArn` |
 | `PUBLIC_APP_ORIGIN` | Trusted production HTTPS origin |
+| `PREVIEW_ENABLED` | Set to `true` only after the preview MongoDB parameter exists |
 
 ## Runtime secret
 
 The Atlas URI belongs in an SSM Parameter Store `SecureString` named
 `/formforge/production/mongodb-uri`. The task execution role can read only
 parameters below `/formforge/production/`.
+
+Pull request previews use a separate `SecureString` at
+`/formforge/preview/mongodb-uri`, a task execution role that cannot read
+production parameters, and a runtime role without SES permissions. Each PR
+selects a separate logical database through `MONGODB_DATABASE`.
+Keep `PREVIEW_ENABLED=false` until this parameter contains a credential scoped
+to preview databases, then change it to `true` to activate PR deployments.
 
 The verified Amazon SES sender belongs in
 `/formforge/production/password-reset-from-email`. Deploy the foundation with
@@ -81,6 +92,13 @@ with the verified commit-SHA image, `/api/health` as its load-balancer health
 check, and the smallest practical task size. Creating the service also
 provisions Fargate and an Application Load Balancer, which consume AWS credits
 while they exist.
+
+Pull requests from this repository create `formforge-pr-<number>` services after
+verification succeeds. The GitHub `preview` environment assumes a dedicated
+OIDC role, publishes an immutable `pr-*` image, and exposes the ECS endpoint on
+the deployment record. Closing the PR deletes the Express service and its
+managed load-balancing resources. Configure the `preview` environment to require
+review before deployment if previews should incur cost only after approval.
 
 The runtime remains gated on:
 

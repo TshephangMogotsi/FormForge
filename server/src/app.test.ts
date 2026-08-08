@@ -26,6 +26,7 @@ import type {
   FormPage,
   FormRecord,
   FormRepository,
+  OwnerAnalyticsCounts,
   PublishedFormRecord,
   SubmissionAnalyticsCounts,
   SubmissionPage,
@@ -308,6 +309,45 @@ class InMemoryFormRepository implements FormRepository {
       })
     };
   }
+
+  async getOwnerAnalytics(ownerId: string, since: Date): Promise<OwnerAnalyticsCounts> {
+    const forms = [...this.forms.values()]
+      .filter((form) => form.ownerId === ownerId)
+      .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime());
+    const ownedFormIds = new Set(forms.map((form) => form.id));
+    const submissions = this.submissions.filter((submission) =>
+      ownedFormIds.has(submission.formId)
+    );
+    const recent = submissions.filter((submission) => submission.createdAt >= since);
+    const trendCounts = new Map<string, number>();
+    recent.forEach((submission) => {
+      const date = submission.createdAt.toISOString().slice(0, 10);
+      trendCounts.set(date, (trendCounts.get(date) ?? 0) + 1);
+    });
+
+    return {
+      totalForms: forms.length,
+      publishedForms: forms.filter((form) => form.status === "published").length,
+      total: submissions.length,
+      sinceTotal: recent.length,
+      trend: [...trendCounts].map(([date, count]) => ({ date, count })),
+      forms: forms.map((form) => {
+        const formSubmissions = submissions.filter(
+          (submission) => submission.formId === form.id
+        );
+        return {
+          formId: form.id,
+          title: form.title,
+          status: form.status,
+          publishedVersion: form.publishedVersion,
+          total: formSubmissions.length,
+          sinceTotal: formSubmissions.filter(
+            (submission) => submission.createdAt >= since
+          ).length
+        };
+      })
+    };
+  }
 }
 
 function createTestApp(
@@ -573,12 +613,15 @@ describe("FormForge API", () => {
 
   it("requires authentication before form access", async () => {
     const response = await request(app).get("/api/v1/forms");
+    const analytics = await request(app).get("/api/v1/forms/analytics");
     const duplication = await request(app).post(
       "/api/v1/forms/000000000000000000000001/duplicate"
     );
 
     expect(response.status).toBe(401);
     expect(response.body.error.code).toBe("UNAUTHENTICATED");
+    expect(analytics.status).toBe(401);
+    expect(analytics.body.error.code).toBe("UNAUTHENTICATED");
     expect(duplication.status).toBe(401);
     expect(duplication.body.error.code).toBe("UNAUTHENTICATED");
   });
@@ -877,6 +920,107 @@ describe("FormForge API", () => {
     const deletedPublicForm = await request(app).get(`/api/v1/public/forms/${slug}`);
     expect(deletedPublicForm.status).toBe(404);
     expect(deletedPublicForm.body.error.code).toBe("PUBLIC_FORM_NOT_FOUND");
+  });
+
+  it("summarizes analytics across only the authenticated owner's forms", async () => {
+    const owner = request.agent(app);
+    const outsider = request.agent(app);
+    await register(owner, "owner@example.com", "Owner");
+    await register(outsider, "outsider@example.com", "Outsider");
+    const ownerFieldId = "b3b2c1d0-7a6f-4f52-91af-2f2a5cf56e21";
+    const outsiderFieldId = "70b39b40-5fe6-4181-bd80-83f2739010d3";
+
+    const ownerPublished = await owner
+      .post("/api/v1/forms")
+      .send({ title: "Published survey" });
+    const ownerPublishedId = ownerPublished.body.data.form.id as string;
+    await owner.patch(`/api/v1/forms/${ownerPublishedId}`).send({
+      fields: [
+        {
+          id: ownerFieldId,
+          type: "shortText",
+          label: "Feedback",
+          description: "",
+          placeholder: "",
+          required: true,
+          options: []
+        }
+      ]
+    });
+    const ownerPublication = await owner.post(
+      `/api/v1/forms/${ownerPublishedId}/publish`
+    );
+    const ownerSlug = ownerPublication.body.data.publication.slug as string;
+    await request(app)
+      .post(`/api/v1/public/forms/${ownerSlug}/submissions`)
+      .send({ answers: [{ fieldId: ownerFieldId, value: "First" }] });
+    await request(app)
+      .post(`/api/v1/public/forms/${ownerSlug}/submissions`)
+      .send({ answers: [{ fieldId: ownerFieldId, value: "Second" }] });
+    const ownerDraft = await owner
+      .post("/api/v1/forms")
+      .send({ title: "Unpublished survey" });
+    const ownerDraftId = ownerDraft.body.data.form.id as string;
+
+    const outsiderForm = await outsider
+      .post("/api/v1/forms")
+      .send({ title: "Outsider survey" });
+    const outsiderFormId = outsiderForm.body.data.form.id as string;
+    await outsider.patch(`/api/v1/forms/${outsiderFormId}`).send({
+      fields: [
+        {
+          id: outsiderFieldId,
+          type: "shortText",
+          label: "Private feedback",
+          description: "",
+          placeholder: "",
+          required: true,
+          options: []
+        }
+      ]
+    });
+    const outsiderPublication = await outsider.post(
+      `/api/v1/forms/${outsiderFormId}/publish`
+    );
+    const outsiderSlug = outsiderPublication.body.data.publication.slug as string;
+    await request(app)
+      .post(`/api/v1/public/forms/${outsiderSlug}/submissions`)
+      .send({ answers: [{ fieldId: outsiderFieldId, value: "Private" }] });
+
+    const overview = await owner.get("/api/v1/forms/analytics");
+
+    expect(overview.status).toBe(200);
+    expect(overview.body.data.analytics).toMatchObject({
+      totalForms: 2,
+      publishedForms: 1,
+      totalResponses: 2,
+      last7DaysResponses: 2,
+      forms: expect.arrayContaining([
+        {
+          formId: ownerPublishedId,
+          title: "Published survey",
+          status: "published",
+          publishedVersion: 1,
+          totalResponses: 2,
+          last7DaysResponses: 2
+        },
+        {
+          formId: ownerDraftId,
+          title: "Unpublished survey",
+          status: "draft",
+          publishedVersion: 0,
+          totalResponses: 0,
+          last7DaysResponses: 0
+        }
+      ])
+    });
+    expect(
+      overview.body.data.analytics.trend.reduce(
+        (sum: number, point: { count: number }) => sum + point.count,
+        0
+      )
+    ).toBe(2);
+    expect(JSON.stringify(overview.body)).not.toContain("Outsider survey");
   });
 
   it("refuses to publish an empty form", async () => {

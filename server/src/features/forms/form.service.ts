@@ -33,6 +33,27 @@ function createDuplicateTitle(title: string) {
   return `${title.slice(0, 120 - suffix.length)}${suffix}`;
 }
 
+function sevenDayWindow() {
+  const today = new Date();
+  const todayUtc = new Date(
+    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+  );
+  return new Date(todayUtc.getTime() - 6 * 24 * 60 * 60 * 1000);
+}
+
+function fillSevenDayTrend(
+  since: Date,
+  entries: Array<{ date: string; count: number }>
+) {
+  const trendByDate = new Map(entries.map((entry) => [entry.date, entry.count]));
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(since.getTime() + index * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    return { date, count: trendByDate.get(date) ?? 0 };
+  });
+}
+
 function validateAnswer(field: FormField, value: SubmissionAnswer["value"]): string | null {
   if (field.type === "shortText" || field.type === "longText") {
     if (typeof value !== "string") return "Enter a text response.";
@@ -199,23 +220,13 @@ export class FormService {
     const form = await this.get(ownerId, formId);
     const publication = form.slug ? await this.forms.findPublishedBySlug(form.slug) : null;
     const selectFields = publication?.fields.filter((field) => field.type === "select") ?? [];
-    const today = new Date();
-    const todayUtc = new Date(
-      Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
-    );
-    const since = new Date(todayUtc.getTime() - 6 * 24 * 60 * 60 * 1000);
+    const since = sevenDayWindow();
     const counts = await this.forms.getSubmissionAnalytics(
       formId,
       since,
       selectFields.map((field) => field.id)
     );
-    const trendByDate = new Map(counts.trend.map((entry) => [entry.date, entry.count]));
-    const trend = Array.from({ length: 7 }, (_, index) => {
-      const date = new Date(since.getTime() + index * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .slice(0, 10);
-      return { date, count: trendByDate.get(date) ?? 0 };
-    });
+    const trend = fillSevenDayTrend(since, counts.trend);
 
     const distributions = selectFields.map((field) => {
       const fieldCounts = counts.options.filter((entry) => entry.fieldId === field.id);
@@ -242,6 +253,26 @@ export class FormService {
       last7DaysResponses: counts.sinceTotal,
       trend,
       distributions
+    };
+  }
+
+  async getOwnerAnalytics(ownerId: string) {
+    const since = sevenDayWindow();
+    const counts = await this.forms.getOwnerAnalytics(ownerId, since);
+    return {
+      totalForms: counts.totalForms,
+      publishedForms: counts.publishedForms,
+      totalResponses: counts.total,
+      last7DaysResponses: counts.sinceTotal,
+      trend: fillSevenDayTrend(since, counts.trend),
+      forms: counts.forms.map((form) => ({
+        formId: form.formId,
+        title: form.title,
+        status: form.status,
+        publishedVersion: form.publishedVersion,
+        totalResponses: form.total,
+        last7DaysResponses: form.sinceTotal
+      }))
     };
   }
 

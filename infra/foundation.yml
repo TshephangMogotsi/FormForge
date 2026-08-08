@@ -46,6 +46,12 @@ Parameters:
     AllowedPattern: "^[A-Za-z0-9._-]+$"
     Description: GitHub environment allowed to deploy the production service.
 
+  GitHubPreviewEnvironment:
+    Type: String
+    Default: preview
+    AllowedPattern: "^[A-Za-z0-9._-]+$"
+    Description: GitHub environment allowed to deploy pull request previews.
+
   PasswordResetSesIdentity:
     Type: String
     Default: ""
@@ -103,6 +109,20 @@ Resources:
               },
               {
                 "rulePriority": 2,
+                "description": "Remove pull request preview images after seven days",
+                "selection": {
+                  "tagStatus": "tagged",
+                  "tagPrefixList": ["pr-"],
+                  "countType": "sinceImagePushed",
+                  "countUnit": "days",
+                  "countNumber": 7
+                },
+                "action": {
+                  "type": "expire"
+                }
+              },
+              {
+                "rulePriority": 3,
                 "description": "Keep the twenty most recent release images",
                 "selection": {
                   "tagStatus": "tagged",
@@ -197,6 +217,60 @@ Resources:
       Tags:
         - Key: Application
           Value: !Ref ApplicationName
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  PreviewTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ApplicationName}-preview-task-execution"
+      Path: /formforge/
+      Description: Pulls preview images, writes logs, and reads only preview runtime secrets.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: ReadFormForgePreviewParameters
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ReadPreviewRuntimeParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameters
+                Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/formforge/preview/*"
+      Tags:
+        - Key: Application
+          Value: !Ref ApplicationName
+        - Key: Environment
+          Value: preview
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  PreviewApplicationTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ApplicationName}-preview-application"
+      Path: /formforge/
+      Description: Runs preview application tasks without production email permissions.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Tags:
+        - Key: Application
+          Value: !Ref ApplicationName
+        - Key: Environment
+          Value: preview
         - Key: ManagedBy
           Value: CloudFormation
 
@@ -303,6 +377,107 @@ Resources:
         - Key: ManagedBy
           Value: CloudFormation
 
+  GitHubPreviewDeploymentRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ApplicationName}-github-preview"
+      Path: /formforge/
+      Description: Publishes and manages preview-tagged ECS services from the protected preview environment.
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Ref GitHubOidcProvider
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubOwner}@${GitHubOwnerId}/${GitHubRepository}@${GitHubRepositoryId}:environment:${GitHubPreviewEnvironment}"
+      Policies:
+        - PolicyName: PublishFormForgePreviewImages
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: AuthenticateToEcr
+                Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: "*"
+              - Sid: PushPreviewImages
+                Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:BatchGetImage
+                  - ecr:CompleteLayerUpload
+                  - ecr:DescribeImages
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:InitiateLayerUpload
+                  - ecr:PutImage
+                  - ecr:UploadLayerPart
+                Resource: !GetAtt ContainerRepository.Arn
+        - PolicyName: DeployFormForgePreviewServices
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ReadExpressServices
+                Effect: Allow
+                Action:
+                  - ecs:DescribeClusters
+                  - ecs:DescribeExpressGatewayService
+                  - ecs:DescribeServiceDeployments
+                  - ecs:DescribeServices
+                  - ecs:ListServiceDeployments
+                  - ecs:ListServices
+                Resource: "*"
+              - Sid: CreatePreviewServices
+                Effect: Allow
+                Action:
+                  - ecs:CreateExpressGatewayService
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:RequestTag/Environment: preview
+              - Sid: RegisterPreviewTaskDefinitions
+                Effect: Allow
+                Action:
+                  - ecs:RegisterTaskDefinition
+                Resource: "*"
+              - Sid: ManagePreviewServices
+                Effect: Allow
+                Action:
+                  - ecs:DeleteExpressGatewayService
+                  - ecs:TagResource
+                  - ecs:UntagResource
+                  - ecs:UpdateExpressGatewayService
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/Environment: preview
+              - Sid: PassPreviewTaskExecutionRole
+                Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource: !GetAtt PreviewTaskExecutionRole.Arn
+              - Sid: PassExpressInfrastructureRole
+                Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource: !GetAtt ExpressInfrastructureRole.Arn
+              - Sid: PassPreviewApplicationTaskRole
+                Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource: !GetAtt PreviewApplicationTaskRole.Arn
+      Tags:
+        - Key: Application
+          Value: !Ref ApplicationName
+        - Key: Environment
+          Value: preview
+        - Key: ManagedBy
+          Value: CloudFormation
+
 Outputs:
   ApplicationClusterName:
     Description: ECS cluster that hosts the FormForge Express service.
@@ -328,6 +503,18 @@ Outputs:
     Description: Runtime role assumed by the FormForge application container.
     Value: !GetAtt ApplicationTaskRole.Arn
 
+  GitHubPreviewDeploymentRoleArn:
+    Description: Role assumed by the protected GitHub preview environment.
+    Value: !GetAtt GitHubPreviewDeploymentRole.Arn
+
+  PreviewTaskExecutionRoleArn:
+    Description: ECS execution role restricted to preview runtime secrets.
+    Value: !GetAtt PreviewTaskExecutionRole.Arn
+
+  PreviewApplicationTaskRoleArn:
+    Description: Runtime role for preview tasks without production email access.
+    Value: !GetAtt PreviewApplicationTaskRole.Arn
+
   ExpressInfrastructureRoleArn:
     Description: Infrastructure role used by ECS Express Mode.
     Value: !GetAtt ExpressInfrastructureRole.Arn
@@ -335,3 +522,7 @@ Outputs:
   MongoDbParameterName:
     Description: Expected SSM SecureString name for the production MongoDB URI.
     Value: /formforge/production/mongodb-uri
+
+  PreviewMongoDbParameterName:
+    Description: Expected SSM SecureString name for the preview MongoDB URI.
+    Value: /formforge/preview/mongodb-uri

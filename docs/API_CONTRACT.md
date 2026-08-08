@@ -53,6 +53,7 @@ All form endpoints require authentication.
 - `GET /api/v1/forms/:formId`
 - `PATCH /api/v1/forms/:formId`
 - `POST /api/v1/forms/:formId/publish`
+- `GET /api/v1/forms/analytics`
 - `GET /api/v1/forms/:formId/submissions?page=1&limit=10`
 - `GET /api/v1/forms/:formId/analytics`
 - `DELETE /api/v1/forms/:formId`
@@ -77,6 +78,11 @@ to 20 unique, non-empty options.
 Duplicating a form copies its title, description, and fields into a new draft.
 The copied fields receive new UUIDs. Published versions, the public slug,
 submissions, and analytics remain attached only to the source form.
+
+The collection analytics endpoint returns owner-scoped totals for forms,
+published forms, all responses, responses from the last seven UTC days, a
+seven-day response trend, and per-form response totals. Form-specific analytics
+remain available through `/api/v1/forms/:formId/analytics`.
 
 Example draft update:
 

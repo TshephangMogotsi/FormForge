@@ -17,7 +17,7 @@ architecture decisions, automated checks, and delivery path—not only the UI.
 - A responsive React form builder with drag-and-drop ordering and autosave.
 - Immutable, versioned publishing behind stable public form links.
 - Public submissions independently revalidated by the Express API.
-- Paginated, version-aware response review and MongoDB-backed analytics.
+- Paginated, version-aware response review with owner-wide and form-specific analytics.
 - Registration, login, logout, session restoration, and password recovery.
 - Revocable server-side sessions and single-use reset tokens stored as hashes.
 - Amazon SES email delivery behind a provider-neutral notifier boundary.
@@ -125,9 +125,11 @@ npm run build
 | Check | Current coverage |
 | --- | --- |
 | Type checking | Client and server TypeScript workspaces |
-| Integration tests | 19 API tests covering auth, isolation, drafts, duplication, publishing, submissions, and analytics |
+| Integration tests | 20 API tests covering auth, isolation, drafts, duplication, publishing, submissions, and analytics |
+| Browser tests | 4 Chromium flows covering responsive layout, keyboard menus, destructive dialogs, and analytics drill-down |
 | Production build | Compiled Express server and code-split Vite client |
-| Container publication | Immutable `sha-<commit>` images in GHCR and private ECR |
+| Preview delivery | PR-scoped ECS services with isolated databases and automatic teardown |
+| Container publication | Immutable `sha-*` and `pr-*` images in GHCR or private ECR |
 | Production smoke test | External `/api/health` check after ECS service stabilization |
 
 The badge at the top reflects the latest `main` verification result.
@@ -138,6 +140,7 @@ The badge at the top reflects the latest `main` verification result.
 flowchart LR
     Commit["Push or pull request"] --> Verify["Type-check, test, build"]
     Verify --> Image["Build container once"]
+    Image --> Preview["PR-scoped ECS preview"]
     Image --> GHCR["Publish SHA image to GHCR"]
     GHCR --> ECR["Copy verified SHA to private ECR"]
     ECR --> Gate["Manual production gate"]
@@ -149,8 +152,10 @@ flowchart LR
 The production workflow selects an existing immutable ECR image rather than
 rebuilding source. AWS access is assumed through GitHub OIDC, runtime secrets
 are resolved from SSM Parameter Store, and rollback means deploying the previous
-known-good SHA. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for IAM boundaries,
-configuration, launch gates, and rollback strategy.
+known-good SHA. Pull requests use separate preview roles, SSM parameters, and
+logical databases, and their ECS service is removed when the PR closes. See
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for IAM boundaries, configuration,
+launch gates, previews, and rollback strategy.
 
 ## Demo data
 

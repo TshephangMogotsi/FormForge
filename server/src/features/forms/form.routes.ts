@@ -54,6 +54,14 @@ export function createFormRouter(authService: AuthService, formService: FormServ
   );
 
   router.get(
+    "/analytics",
+    asyncHandler(async (request, response) => {
+      const analytics = await formService.getOwnerAnalytics(request.auth!.userId);
+      response.json({ data: { analytics } });
+    })
+  );
+
+  router.get(
     "/:formId/submissions",
     asyncHandler(async (request, response) => {
       const formId = formIdSchema.parse(request.params.formId);

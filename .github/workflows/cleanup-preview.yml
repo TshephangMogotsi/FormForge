@@ -1,0 +1,47 @@
+name: Remove pull request preview
+
+on:
+  pull_request:
+    types:
+      - closed
+
+concurrency:
+  group: delivery-refs/pull/${{ github.event.number }}/merge
+  cancel-in-progress: true
+
+jobs:
+  cleanup:
+    name: Remove AWS preview resources
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: preview
+
+    steps:
+      - name: Assume the isolated AWS preview role
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_PREVIEW_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Find and remove the pull request service
+        env:
+          ECS_CLUSTER: ${{ vars.ECS_CLUSTER }}
+          SERVICE_NAME: formforge-pr-${{ github.event.number }}
+        run: |
+          SERVICE_ARN=$(aws ecs list-services \
+            --cluster "$ECS_CLUSTER" \
+            --resource-management-type ECS \
+            --query "serviceArns[?ends_with(@, '/$SERVICE_NAME')] | [0]" \
+            --output text)
+          if [ -z "$SERVICE_ARN" ] || [ "$SERVICE_ARN" = "None" ]; then
+            echo "No preview service exists for pull request ${{ github.event.number }}."
+            exit 0
+          fi
+          aws ecs delete-express-gateway-service \
+            --service-arn "$SERVICE_ARN" \
+            --monitor-resources RESOURCE \
+            --monitor-mode TEXT-ONLY
