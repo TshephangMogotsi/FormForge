@@ -126,6 +126,32 @@ repository's `.env` file.
 | `PASSWORD_RESET_TTL_MINUTES` | Single-use reset-link lifetime |
 | `PASSWORD_RESET_FROM_EMAIL` | Verified Amazon SES sender |
 
+## Verified release record
+
+### 2026-08-08 — form actions, workspace analytics, and PR previews
+
+- Pull request: [#1](https://github.com/TshephangMogotsi/FormForge/pull/1)
+- Production commit: `2a634059c494f0729052d3a9984f20f48c73e92b`
+- Immutable image: `sha-2a634059c494f0729052d3a9984f20f48c73e92b`
+- Verification and publication:
+  [GitHub Actions run 31267645929](https://github.com/TshephangMogotsi/FormForge/actions/runs/31267645929)
+- Production deployment:
+  [GitHub Actions run 31267736830](https://github.com/TshephangMogotsi/FormForge/actions/runs/31267736830)
+- Automated evidence: 20 API tests, 4 Chromium interaction flows, TypeScript
+  checks, a production build, a zero-vulnerability npm audit, CloudFormation
+  linting, and workflow YAML validation.
+- Deployment evidence: ECS Express stabilized in 9 minutes 32 seconds; the
+  external health check returned `status=ok` with MongoDB connected, and the
+  branded application root returned HTTP 200.
+- Preview state: the isolated IAM roles, GitHub environment, repository
+  variables, PR-scoped service workflow, and close-event cleanup workflow are
+  installed. `PREVIEW_ENABLED=false` remains the safety gate until
+  `/formforge/preview/mongodb-uri` contains a credential for a separate
+  non-production Atlas environment.
+- Cleanup evidence: the incomplete test preview `formforge-pr-1` and its managed
+  load-balancing resources were deleted; no PR preview service remained in the
+  ECS cluster.
+
 ## Launch gate
 
 Before exposing the service:
