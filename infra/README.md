@@ -55,6 +55,7 @@ stored as repository variables, not hard-coded in the workflow.
 | `ECS_PREVIEW_APPLICATION_TASK_ROLE_ARN` | `PreviewApplicationTaskRoleArn` |
 | `ECS_EXPRESS_INFRASTRUCTURE_ROLE_ARN` | `ExpressInfrastructureRoleArn` |
 | `PUBLIC_APP_ORIGIN` | Trusted production HTTPS origin |
+| `PREVIEW_ENABLED` | Set to `true` only after the preview MongoDB parameter exists |
 
 ## Runtime secret
 
@@ -66,6 +67,8 @@ Pull request previews use a separate `SecureString` at
 `/formforge/preview/mongodb-uri`, a task execution role that cannot read
 production parameters, and a runtime role without SES permissions. Each PR
 selects a separate logical database through `MONGODB_DATABASE`.
+Keep `PREVIEW_ENABLED=false` until this parameter contains a credential scoped
+to preview databases, then change it to `true` to activate PR deployments.
 
 The verified Amazon SES sender belongs in
 `/formforge/production/password-reset-from-email`. Deploy the foundation with

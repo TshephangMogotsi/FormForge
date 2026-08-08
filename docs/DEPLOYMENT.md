@@ -53,6 +53,11 @@ required reviewers. Preview services create billable Fargate and load-balancer
 resources, so stale PRs should be closed promptly even though the cleanup
 workflow is automatic.
 
+`PREVIEW_ENABLED` is a repository variable and must remain `false` until
+`/formforge/preview/mongodb-uri` contains a preview-only Atlas credential. Set it
+to `true` after that one-time prerequisite is complete; this gate prevents
+incomplete preview configuration from creating unhealthy billable services.
+
 ## AWS delivery foundation
 
 The AWS reference deployment uses ECS Express Mode in `eu-west-1`. The
