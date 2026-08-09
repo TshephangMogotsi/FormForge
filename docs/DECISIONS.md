@@ -240,6 +240,9 @@ without improving the no-cost MVP.
 
 Read-only AWS verification on 2026-08-09 confirmed that production runs in three
 public subnets, its task security group permits public egress, and MongoDB configuration
-is injected from an SSM `SecureString` rather than a plain environment value. Atlas
-user roles and the Atlas-side network access list remain separate console checks; this
-decision does not claim they were verified from AWS.
+is injected from an SSM `SecureString` rather than a plain environment value. Separate
+read-only Atlas inspection confirmed an M0 cluster, a production runtime user limited
+to `readWrite` on the `formforge` database and production cluster, and the documented
+broad public access-list entry. Preview remains isolated in its own Atlas project and
+M0 cluster with a distinct credential; its broader database role is accepted only
+inside that non-production boundary because PR databases are named dynamically.

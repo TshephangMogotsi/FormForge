@@ -133,6 +133,31 @@ repository's `.env` file.
 
 ## Verified release record
 
+### 2026-08-09 — production hardening and no-cost Atlas boundary
+
+- Pull request: [#5](https://github.com/TshephangMogotsi/FormForge/pull/5)
+- Production commit: `4f8965c607d0107d6a81fb8e6c3d5c52886b04a4`
+- Immutable image: `sha-4f8965c607d0107d6a81fb8e6c3d5c52886b04a4`
+- Verification and publication:
+  [GitHub Actions run 31295737063](https://github.com/TshephangMogotsi/FormForge/actions/runs/31295737063)
+- Production deployment:
+  [GitHub Actions run 31295826008](https://github.com/TshephangMogotsi/FormForge/actions/runs/31295826008)
+- Automated evidence: 24 API tests, 5 Chromium interaction flows including a
+  360-pixel throttled-network public-form flow, TypeScript checks, production build,
+  CloudFormation linting, and workflow YAML validation.
+- Deployment evidence: ECS Express stabilized with `/api/health/ready` as its
+  load-balancer check; the branded liveness and readiness endpoints succeeded with
+  the database ready, and the application root returned HTTP 200.
+- Lifecycle evidence: a synthetic production check registered, created and published
+  a form, read the public snapshot, submitted a response, retrieved owner responses
+  and analytics, deleted the form, and logged out successfully. The generated account
+  remains because the product intentionally has no account-deletion endpoint.
+- Atlas evidence: production and preview both use free M0 clusters in separate
+  projects with distinct runtime users. Production is limited to `readWrite` on the
+  `formforge` database and its cluster. Broad public IP access remains an explicitly
+  accepted residual risk for dynamic ECS egress; details are in
+  `docs/ATLAS_NETWORKING.md`.
+
 ### 2026-08-08 — form actions, workspace analytics, and PR previews
 
 - Pull request: [#1](https://github.com/TshephangMogotsi/FormForge/pull/1)
