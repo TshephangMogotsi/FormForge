@@ -29,6 +29,18 @@ const draftForm = {
   id: "000000000000000000000102",
   title: "Product research draft",
   description: "Early research questions.",
+  fields: [
+    ...publishedForm.fields,
+    {
+      id: "3d4445e2-1381-428a-b960-99edbdd15662",
+      type: "longText",
+      label: "What should we research next?",
+      description: "",
+      placeholder: "Share an idea",
+      required: false,
+      options: []
+    }
+  ],
   status: "draft",
   slug: null,
   publishedVersion: 0,
@@ -106,6 +118,13 @@ async function mockApplication(page: Page) {
     }
 
     const formPath = path.match(/^\/api\/v1\/forms\/([^/]+)$/);
+    if (formPath && request.method() === "GET") {
+      const form = forms.find((candidate) => candidate.id === formPath[1]);
+      return form
+        ? json(route, { data: { form } })
+        : json(route, { error: { code: "NOT_FOUND", message: "Form not found" } }, 404);
+    }
+
     if (formPath && request.method() === "PATCH") {
       const index = forms.findIndex((form) => form.id === formPath[1]);
       const input = request.postDataJSON() as { title: string };
@@ -220,6 +239,43 @@ test("drills down from all-form analytics and returns to the overview", async ({
   await expect(page.getByLabel("Response summary")).toContainText("6");
   await page.getByRole("button", { name: "All forms" }).click();
   await expect(page.getByRole("heading", { name: "All forms" })).toBeVisible();
+});
+
+test("opens an owned builder directly from its stable edit URL", async ({ page }) => {
+  await page.goto(`/forms/${draftForm.id}/edit`);
+  await expect(page).toHaveURL(`/forms/${draftForm.id}/edit`);
+  await expect(page.getByRole("heading", { name: draftForm.title })).toBeVisible();
+  await expect(page.getByLabel("Form title")).toHaveValue(draftForm.title);
+});
+
+test("reorders fields by dragging from the body of a field card", async ({ page }) => {
+  await page.locator(".form-card-open").filter({ hasText: draftForm.title }).click();
+  await expect(page.getByRole("heading", { name: "Product research draft" })).toBeVisible();
+
+  const cards = page.locator(".canvas-field");
+  const firstCard = await cards.nth(0).boundingBox();
+  const secondCard = await cards.nth(1).boundingBox();
+  expect(firstCard).not.toBeNull();
+  expect(secondCard).not.toBeNull();
+
+  await page.mouse.move(
+    secondCard!.x + secondCard!.width * 0.7,
+    secondCard!.y + secondCard!.height / 2
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    firstCard!.x + firstCard!.width * 0.7,
+    firstCard!.y + firstCard!.height / 2,
+    { steps: 12 }
+  );
+  await page.mouse.up();
+
+  await expect(
+    cards.nth(0).getByRole("button", { name: "Reorder What should we research next?" })
+  ).toBeVisible();
+  await expect(
+    cards.nth(1).getByRole("button", { name: "Reorder What worked well?" })
+  ).toBeVisible();
 });
 
 test("keeps dashboard and quick-menu controls usable on a mobile viewport", async ({ page }) => {

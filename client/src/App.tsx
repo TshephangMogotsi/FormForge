@@ -19,6 +19,11 @@ import { api, type FormSummary, type User } from "./lib/api";
 const BuilderPage = lazy(() =>
   import("./features/builder/BuilderPage").then((module) => ({ default: module.BuilderPage }))
 );
+const GuestBuilderPage = lazy(() =>
+  import("./features/builder/GuestBuilderPage").then((module) => ({
+    default: module.GuestBuilderPage
+  }))
+);
 const PublicFormPage = lazy(() =>
   import("./features/public/PublicFormPage").then((module) => ({ default: module.PublicFormPage }))
 );
@@ -26,11 +31,25 @@ const ResponsesPage = lazy(() =>
   import("./features/responses/ResponsesPage").then((module) => ({ default: module.ResponsesPage }))
 );
 
-const publicFormSlug = window.location.pathname.match(
-  /^\/f\/([a-z0-9]+(?:-[a-z0-9]+)*)\/?$/
-)?.[1] ?? null;
-
 type View = "dashboard" | "builder" | "analytics";
+
+function publicSlug(pathname: string) {
+  return pathname.match(/^\/f\/([a-z0-9]+(?:-[a-z0-9]+)*)\/?$/)?.[1] ?? null;
+}
+
+function formIdFromPath(pathname: string) {
+  return pathname.match(/^\/forms\/([a-f\d]{24})\/edit\/?$/i)?.[1] ?? null;
+}
+
+function analyticsFormIdFromPath(pathname: string) {
+  return pathname.match(/^\/analytics\/([a-f\d]{24})\/?$/i)?.[1] ?? null;
+}
+
+function viewFromPath(pathname: string): View {
+  if (pathname.startsWith("/analytics")) return "analytics";
+  if (formIdFromPath(pathname)) return "builder";
+  return "dashboard";
+}
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -132,9 +151,15 @@ function AppLoading() {
 }
 
 export default function App() {
+  const [pathname, setPathname] = useState(window.location.pathname);
+  const activePublicSlug = publicSlug(pathname);
+  const guestRoute = pathname === "/build/new" || pathname === "/build/new/";
+  const loginRoute = pathname === "/login" || pathname === "/login/";
   const [user, setUser] = useState<User | null>(null);
-  const [checkingSession, setCheckingSession] = useState(publicFormSlug === null);
-  const [view, setView] = useState<View>("dashboard");
+  const [checkingSession, setCheckingSession] = useState(
+    activePublicSlug === null && !guestRoute && !loginRoute && pathname !== "/"
+  );
+  const [view, setView] = useState<View>(() => viewFromPath(window.location.pathname));
   const [forms, setForms] = useState<FormSummary[]>([]);
   const [formsLoading, setFormsLoading] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -144,14 +169,30 @@ export default function App() {
   const [activeForm, setActiveForm] = useState<FormSummary | null>(null);
   const [analyticsForm, setAnalyticsForm] = useState<FormSummary | null>(null);
 
+  function navigate(path: string, replace = false) {
+    if (replace) window.history.replaceState({}, "", path);
+    else window.history.pushState({}, "", path);
+    setPathname(new URL(path, window.location.origin).pathname);
+  }
+
   useEffect(() => {
-    if (publicFormSlug) return;
+    const handlePopState = () => setPathname(window.location.pathname);
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  useEffect(() => {
+    setView(viewFromPath(pathname));
+  }, [pathname]);
+
+  useEffect(() => {
+    if (activePublicSlug) return;
     api
       .me()
       .then(setUser)
       .catch(() => setUser(null))
       .finally(() => setCheckingSession(false));
-  }, []);
+  }, [activePublicSlug]);
 
   useEffect(() => {
     if (!user) {
@@ -170,6 +211,30 @@ export default function App() {
       .finally(() => setFormsLoading(false));
   }, [user]);
 
+  useEffect(() => {
+    const requestedFormId = formIdFromPath(pathname);
+    if (!user || !requestedFormId || activeForm?.id === requestedFormId) return;
+    api
+      .getForm(requestedFormId)
+      .then(setActiveForm)
+      .catch((caughtError) => {
+        setError(errorMessage(caughtError, "The selected form could not be loaded."));
+        navigate("/dashboard", true);
+      });
+  }, [activeForm?.id, pathname, user]);
+
+  useEffect(() => {
+    const requestedFormId = analyticsFormIdFromPath(pathname);
+    if (!user || !requestedFormId || analyticsForm?.id === requestedFormId) return;
+    api
+      .getForm(requestedFormId)
+      .then(setAnalyticsForm)
+      .catch((caughtError) => {
+        setError(errorMessage(caughtError, "The selected form could not be loaded."));
+        navigate("/analytics", true);
+      });
+  }, [analyticsForm?.id, pathname, user]);
+
   async function handleCreate() {
     setCreating(true);
     setError(null);
@@ -179,6 +244,7 @@ export default function App() {
       setForms((current) => [form, ...current]);
       setActiveForm(form);
       setView("builder");
+      navigate(`/forms/${form.id}/edit`);
     } catch (caughtError) {
       setError(errorMessage(caughtError, "The form could not be created."));
     } finally {
@@ -264,46 +330,77 @@ export default function App() {
       setAnalyticsForm(null);
       setNotice(null);
       setView("dashboard");
+      navigate("/build/new");
     }
   }
 
   function handleNavigate(nextView: View) {
-    if (nextView === "analytics") setAnalyticsForm(null);
-    setView(nextView);
+    if (nextView === "analytics") {
+      setAnalyticsForm(null);
+      setView("analytics");
+      navigate("/analytics");
+      return;
+    }
+
+    if (nextView === "builder" && activeForm) {
+      setView("builder");
+      navigate(`/forms/${activeForm.id}/edit`);
+      return;
+    }
+
+    setView("dashboard");
+    navigate("/dashboard");
   }
 
   async function handleSelectAnalyticsForm(formId: string) {
     const loadedForm = forms.find((form) => form.id === formId);
     if (loadedForm) {
       setAnalyticsForm(loadedForm);
+      navigate(`/analytics/${loadedForm.id}`);
       return;
     }
 
     try {
-      setAnalyticsForm(await api.getForm(formId));
+      const form = await api.getForm(formId);
+      setAnalyticsForm(form);
+      navigate(`/analytics/${form.id}`);
     } catch (caughtError) {
       setError(errorMessage(caughtError, "The selected form could not be loaded."));
       setView("dashboard");
     }
   }
 
-  if (publicFormSlug) {
+  if (activePublicSlug) {
     return (
       <Suspense fallback={<AppLoading />}>
-        <PublicFormPage slug={publicFormSlug} />
+        <PublicFormPage slug={activePublicSlug} />
       </Suspense>
     );
   }
+
+  if (guestRoute || (pathname === "/" && !user && !checkingSession)) {
+    return (
+      <Suspense fallback={<AppLoading />}>
+        <GuestBuilderPage
+          onSignIn={() => navigate("/login?returnTo=%2Fbuild%2Fnew")}
+        />
+      </Suspense>
+    );
+  }
+
+  const authenticate = (authenticatedUser: User) => {
+    setUser(authenticatedUser);
+    const returnTo = new URLSearchParams(window.location.search).get("returnTo");
+    navigate(returnTo === "/build/new" ? returnTo : "/dashboard", true);
+  };
+
+  if (loginRoute) {
+    return <AuthPage onAuthenticated={authenticate} />;
+  }
+
   if (checkingSession) return <AppLoading />;
   if (!user) {
-    return (
-      <AuthPage
-        onAuthenticated={(authenticatedUser) => {
-          setUser(authenticatedUser);
-          setView("dashboard");
-        }}
-      />
-    );
+    return <AuthPage onAuthenticated={authenticate} />;
   }
 
   return (
@@ -313,7 +410,9 @@ export default function App() {
       onNavigate={handleNavigate}
       onLogout={handleLogout}
     >
-      {view === "dashboard" || (view === "builder" && !activeForm) ? (
+      {view === "builder" && !activeForm && formIdFromPath(pathname) ? (
+        <AppLoading />
+      ) : view === "dashboard" || (view === "builder" && !activeForm) ? (
         <DashboardPage
           user={user}
           forms={forms}
@@ -334,20 +433,27 @@ export default function App() {
           onViewResponses={(form) => {
             setAnalyticsForm(form);
             setView("analytics");
+            navigate(`/analytics/${form.id}`);
           }}
           onOpen={(form) => {
             setActiveForm(form);
             setView("builder");
+            navigate(`/forms/${form.id}/edit`);
           }}
         />
       ) : view === "builder" && activeForm ? (
         <Suspense fallback={<AppLoading />}>
           <BuilderPage
+            mode="owned"
             formId={activeForm.id}
-            onBack={() => setView("dashboard")}
+            onBack={() => {
+              setView("dashboard");
+              navigate("/dashboard");
+            }}
             onOpenResponses={() => {
               setAnalyticsForm(activeForm);
               setView("analytics");
+              navigate(`/analytics/${activeForm.id}`);
             }}
             onSaved={(savedForm) => {
               setActiveForm(savedForm);
@@ -364,10 +470,14 @@ export default function App() {
         <Suspense fallback={<AppLoading />}>
           <ResponsesPage
             form={analyticsForm}
-            onBack={() => setAnalyticsForm(null)}
+            onBack={() => {
+              setAnalyticsForm(null);
+              navigate("/analytics");
+            }}
             onEdit={() => {
               setActiveForm(analyticsForm);
               setView("builder");
+              navigate(`/forms/${analyticsForm.id}/edit`);
             }}
           />
         </Suspense>

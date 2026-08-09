@@ -2,16 +2,19 @@
 
 ## System context
 
-FormForge is a modular MERN application with two user-facing surfaces:
+FormForge is a modular MERN application with three user-facing surfaces:
 
+- The guest builder, which stores one bounded draft in the visitor's browser.
 - The authenticated owner application used to build forms and inspect results.
 - The public form runtime used by respondents, often from mobile devices.
 
 ```mermaid
 flowchart LR
+    Visitor["Guest visitor"] --> Guest["React guest builder"]
     Owner["Form owner"] --> Client["React owner application"]
     Respondent["Form respondent"] --> Public["React public form runtime"]
-    Client --> API["Express REST API"]
+    Guest -. authenticate and claim .-> API["Express REST API"]
+    Client --> API
     Public --> API
     API --> Mongo["MongoDB"]
     API -. optional .-> AI["AI provider adapter"]
@@ -59,11 +62,16 @@ flowchart LR
 
 ### Draft editing
 
-1. The builder loads the owner-scoped form through the REST API.
-2. Dragging, ordering, and property edits remain immediate React interaction state.
-3. After a short idle period, the client sends the complete bounded draft to one
+1. A guest builder initializes one versioned browser draft, while an authenticated
+   builder loads an owner-scoped form through the REST API.
+2. Both modes use the same draft contract and editor; dragging, ordering, and property
+   edits remain immediate React interaction state.
+3. Guest changes persist locally and never create anonymous server records. After a
+   short idle period, the authenticated controller sends the complete bounded draft to one
    owner-scoped update endpoint and exposes pending, saving, saved, and failed states.
-4. Zod validates stable UUIDs, field types, lengths, option constraints, and the
+4. When a guest requests an account capability, authentication completes first and an
+   idempotent claim creates a new owner-scoped form from the complete guest draft.
+5. Zod validates stable UUIDs, field types, lengths, option constraints, and the
    maximum field count before MongoDB atomically replaces the embedded draft array.
 
 ### Submission

@@ -246,3 +246,23 @@ to `readWrite` on the `formforge` database and production cluster, and the docum
 broad public access-list entry. Preview remains isolated in its own Atlas project and
 M0 cluster with a distinct credential; its broader database role is accepted only
 inside that non-production boundary because PR databases are named dynamically.
+
+## ADR-024: Keep pre-authentication drafts in the browser
+
+FormForge lets signed-out visitors use the builder before asking them to create an
+account. The initial guest implementation stores one bounded, versioned draft in
+browser storage and creates no anonymous user, session, form, or submission record on
+the server. Account-owned actions such as cloud persistence, publication, responses,
+analytics, integrations, uploads, and metered providers remain authenticated.
+
+After authentication, the client sends the complete guest draft with a stable
+idempotency identifier to the existing modular API boundary. The server validates it,
+assigns ownership, and returns the canonical form before the client removes local data
+or resumes publication. Authentication tokens remain in HTTP-only cookies and never
+enter browser draft storage.
+
+Server-side anonymous accounts were rejected for the first public trial because they
+would create bot-accessible writes, abandoned database records, retention work, and
+account-linking complexity before the product needs cross-device guest drafts. Storing
+only transient React state was rejected because refreshes and authentication failures
+would destroy work at the highest-value conversion point.
