@@ -52,6 +52,9 @@ Passwords are never returned. The session cookie is HTTP-only, SameSite `Lax`,
 and `Secure` in production.
 
 Registration and password reset both require `password` and `confirmPassword`.
+Registration requires only email and password in the UI; the server assigns the
+neutral display name `FormForge User`. The API still accepts an optional bounded
+`name` for backward compatibility.
 Reset tokens expire after 30 minutes by default. Only their SHA-256 digests are
 stored, and consuming a token atomically deletes it.
 
@@ -184,6 +187,21 @@ responses return only a submission ID, form version, and submission timestamp.
 Abuse reports accept a reason (`spam`, `phishing`, `harmful`, or `other`), up to 1,000
 characters of detail, and an optional reporter email. Reports are accepted only for a
 currently published form and return only a report ID and timestamp.
+
+## Acquisition funnel events
+
+- `POST /api/v1/events`
+
+The unauthenticated endpoint accepts a strict, content-free event envelope and returns
+`202` with no response body. The only accepted properties are `name`, ISO timestamp,
+anonymous and session UUIDs, a sanitized optional campaign, device class, and an
+optional bounded failure category. Form IDs, user IDs, email addresses, titles, field
+definitions, answers, URLs, and arbitrary metadata are rejected as unknown properties.
+
+Accepted journey names are `builder_opened`, `first_meaningful_edit`,
+`publish_selected`, `auth_prompt_shown`, `auth_succeeded`, `draft_claimed`, and
+`publish_succeeded`. Bounded diagnostic names cover authentication, claim, publication,
+and browser-storage failures. Events expire after 90 days.
 
 ## Limits and abuse handling
 

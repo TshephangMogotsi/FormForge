@@ -16,7 +16,7 @@ const newPasswordSchema = z
 
 export const registerSchema = z
   .object({
-    name: z.string().trim().min(2).max(80),
+    name: z.string().trim().min(2).max(80).optional(),
     email: emailSchema,
     password: newPasswordSchema,
     confirmPassword: z.string().max(72)

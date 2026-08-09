@@ -16,6 +16,7 @@ exceeded.
 | Publication | 1 minute | 10 attempts per source IP | Slows rapid public-content churn |
 | Public submissions | 1 minute | 20 attempts per source IP | Slows automated submission spam |
 | Public abuse reports | 1 hour | 5 attempts per source IP | Slows report-channel spam |
+| Acquisition funnel events | 1 minute | 60 events per source IP | Bounds anonymous telemetry writes |
 
 JSON request bodies are limited to 100 KB. Form and submission schemas are limited
 to 50 fields or answers, individual answer strings to 5,000 characters, and dropdowns
@@ -76,6 +77,14 @@ writes; move counters into an atomic shared boundary before scaling writers hori
 - Zod rejects unknown properties, excessive arrays, and invalid identifiers with a
   correlation-aware `400` response.
 - The API never reflects raw malformed input in error logs.
+
+### Funnel pollution and privacy leakage
+
+- The event endpoint accepts a strict property set with enumerated names and failure categories.
+- Form content, account identifiers, respondent answers, URLs, and arbitrary metadata are rejected.
+- Correlation IDs are random browser identifiers, retained for 90 days, and omitted from operator reports.
+- The event-specific and general API limits bound simple high-volume pollution; distributed manipulation
+  would require edge controls and should be considered when interpreting trial conversion data.
 
 ### Ownership probing
 

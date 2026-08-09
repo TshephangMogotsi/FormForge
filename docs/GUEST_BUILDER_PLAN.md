@@ -161,6 +161,11 @@ Exit criteria:
 - The core guest-to-published journey passes automated and manual launch checks.
 - Production rollout and rollback evidence is recorded before declaring the phase done.
 
+Local implementation status (2026-08-09): the bounded funnel, automated journey checks,
+360-pixel and keyboard coverage, recovery scenarios, and bundle budgets are complete.
+The public trial and its rollout/rollback evidence remain intentionally gated on SES
+sender configuration and explicit deployment approval.
+
 ## Delivery sequence
 
 Each phase should be a focused pull request. AWS pull-request previews consume credits,

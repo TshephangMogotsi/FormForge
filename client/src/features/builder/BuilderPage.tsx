@@ -53,6 +53,7 @@ import {
 } from "../../lib/api";
 import { AuthForm } from "../auth/AuthForm";
 import { EmailVerificationPrompt } from "../auth/EmailVerificationPrompt";
+import { failureCategory, trackFunnelEvent } from "../../lib/funnel";
 import type { FormDraft } from "./form-draft";
 
 type SaveState = "saved" | "unsaved" | "saving" | "error";
@@ -417,6 +418,10 @@ export function BuilderPage(props: BuilderPageProps) {
   const [verificationRequired, setVerificationRequired] = useState(false);
   const verificationDialogRef = useRef<HTMLDialogElement>(null);
   const initialIntentAttempted = useRef(false);
+  const acquisitionPublishRef = useRef(
+    props.mode === "owned" && props.initialIntent === "publish"
+  );
+  const acquisitionPublishSucceededRef = useRef(false);
   const lastSavedSnapshot = useRef(
     guestMode ? JSON.stringify(initialDraftRef.current) : ""
   );
@@ -621,7 +626,14 @@ export function BuilderPage(props: BuilderPageProps) {
       setPublishedVersion(result.publication.version);
       setPublishedUrl(`${window.location.origin}/f/${result.publication.slug}`);
       setLinkCopied(false);
+      if (acquisitionPublishRef.current && !acquisitionPublishSucceededRef.current) {
+        acquisitionPublishSucceededRef.current = true;
+        trackFunnelEvent("publish_succeeded");
+      }
     } catch (error) {
+      if (acquisitionPublishRef.current) {
+        trackFunnelEvent("publish_failed", failureCategory(error));
+      }
       if (error instanceof ApiError && error.status === 401) {
         setReauthIntent("publish");
       } else if (error instanceof ApiError && error.code === "EMAIL_VERIFICATION_REQUIRED") {

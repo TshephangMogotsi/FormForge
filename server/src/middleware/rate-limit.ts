@@ -13,7 +13,8 @@ export const rateLimitPolicies = {
   emailVerification: { windowMs: 15 * 60_000, limit: 5 },
   publication: { windowMs: 60_000, limit: 10 },
   publicSubmissions: { windowMs: 60_000, limit: 20 },
-  abuseReports: { windowMs: 60 * 60_000, limit: 5 }
+  abuseReports: { windowMs: 60 * 60_000, limit: 5 },
+  funnelEvents: { windowMs: 60_000, limit: 60 }
 } as const satisfies Record<string, RateLimitPolicy>;
 
 export function createRateLimiter(policy: RateLimitPolicy) {

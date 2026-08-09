@@ -88,11 +88,16 @@ async function mockClaimFlow(
   };
   let verificationRequests = 0;
   const claimBodies: Array<Record<string, unknown>> = [];
+  const funnelEvents: Array<Record<string, unknown>> = [];
 
   await page.route("**/api/v1/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
 
+    if (path === "/api/v1/events" && request.method() === "POST") {
+      funnelEvents.push(request.postDataJSON() as Record<string, unknown>);
+      return json(route, {}, 202);
+    }
     if (path === "/api/v1/auth/me") {
       if (authenticated) return json(route, { data: { user: currentUser } });
       return json(route, { error: { code: "UNAUTHENTICATED", message: "Authentication is required." } }, 401);
@@ -184,19 +189,20 @@ async function mockClaimFlow(
     verifyUser() {
       currentUser = { ...currentUser, emailVerifiedAt: "2026-08-09T08:10:00.000Z" };
     },
-    claimBodies
+    claimBodies,
+    funnelEvents
   };
 }
 
 test("creates an account, claims the local draft, and resumes publishing", async ({ page }) => {
   const requests = await mockClaimFlow(page);
-  await page.goto("/build/new");
+  await page.goto("/build/new?utm_campaign=phase6_trial");
   await page.getByLabel("Form title").fill("Community event signup");
 
   await page.getByRole("button", { name: "Publish" }).click();
   const dialog = page.getByRole("dialog", { name: "Save this form to your account" });
   await expect(dialog.getByRole("heading", { name: "Create a free account" })).toBeVisible();
-  await dialog.getByLabel("Name").fill("Ada Builder");
+  await expect(dialog.getByLabel("Name")).toHaveCount(0);
   await dialog.getByLabel("Email").fill("ada@example.com");
   await dialog.getByLabel(/^Password/).fill("Password1");
   await dialog.getByLabel("Confirm password").fill("Password1");
@@ -209,6 +215,49 @@ test("creates an account, claims the local draft, and resumes publishing", async
   expect(requests.publishAttempts).toBe(1);
   expect(requests.claimBodies[0].title).toBe("Community event signup");
   expect(await page.evaluate(() => localStorage.getItem("formforge.guest-draft.v1"))).toBeNull();
+  await expect.poll(() => requests.funnelEvents.map((event) => event.name)).toEqual([
+    "builder_opened",
+    "first_meaningful_edit",
+    "publish_selected",
+    "auth_prompt_shown",
+    "auth_succeeded",
+    "draft_claimed",
+    "publish_succeeded"
+  ]);
+  for (const event of requests.funnelEvents) {
+    expect(Object.keys(event).sort()).toEqual([
+      "anonymousId",
+      "deviceClass",
+      "failureCategory",
+      "name",
+      "occurredAt",
+      "sessionId",
+      "sourceCampaign"
+    ]);
+    expect(event.sourceCampaign).toBe("phase6_trial");
+    expect(event.deviceClass).toBe("desktop");
+    expect(event).not.toHaveProperty("email");
+    expect(event).not.toHaveProperty("title");
+  }
+});
+
+test("keeps the guest publish gate usable at 360 pixels with keyboard controls", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await mockClaimFlow(page);
+  await page.goto("/build/new");
+
+  const publishButton = page.getByRole("button", { name: "Publish" });
+  await publishButton.focus();
+  await page.keyboard.press("Enter");
+
+  const dialog = page.getByRole("dialog", { name: "Save this form to your account" });
+  await expect(dialog.getByRole("heading", { name: "Create a free account" })).toBeVisible();
+  await expect(dialog.getByLabel("Email")).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  await expect(publishButton).toBeFocused();
 });
 
 test("keeps the claimed account draft when resumed publication fails and retries", async ({ page }) => {
@@ -218,7 +267,6 @@ test("keeps the claimed account draft when resumed publication fails and retries
   await page.getByRole("button", { name: "Publish" }).click();
 
   const dialog = page.getByRole("dialog", { name: "Save this form to your account" });
-  await dialog.getByLabel("Name").fill("Ada Builder");
   await dialog.getByLabel("Email").fill("ada@example.com");
   await dialog.getByLabel(/^Password/).fill("Password1");
   await dialog.getByLabel("Confirm password").fill("Password1");
@@ -243,7 +291,6 @@ test("keeps a claimed draft private until email verification then resumes publis
   await page.getByLabel("Form title").fill("Trusted public form");
   await page.getByRole("button", { name: "Publish" }).click();
   const authDialog = page.getByRole("dialog", { name: "Save this form to your account" });
-  await authDialog.getByLabel("Name").fill("Ada Builder");
   await authDialog.getByLabel("Email").fill("ada@example.com");
   await authDialog.getByLabel(/^Password/).fill("Password1");
   await authDialog.getByLabel("Confirm password").fill("Password1");

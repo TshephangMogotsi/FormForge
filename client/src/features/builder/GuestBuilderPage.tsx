@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { LoaderCircle } from "lucide-react";
 import { AuthForm } from "../auth/AuthForm";
 import { api, type FormSummary, type User } from "../../lib/api";
+import { failureCategory, trackFunnelEvent } from "../../lib/funnel";
 import { BuilderPage, type BuilderIntent } from "./BuilderPage";
 import type { FormDraft } from "./form-draft";
 import {
@@ -51,7 +52,23 @@ export function GuestBuilderPage({
   const [claimError, setClaimError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const guestDraftRef = useRef(state.guestDraft);
+  const initialDraftSnapshotRef = useRef(JSON.stringify(state.guestDraft.draft));
+  const builderOpenedTrackedRef = useRef(false);
+  const meaningfulEditTrackedRef = useRef(false);
+  const storageFailureTrackedRef = useRef(false);
   const pendingIntentRef = useRef<BuilderIntent>("save");
+
+  useEffect(() => {
+    if (builderOpenedTrackedRef.current) return;
+    builderOpenedTrackedRef.current = true;
+    trackFunnelEvent("builder_opened");
+  }, []);
+
+  useEffect(() => {
+    if (!state.storageWarning || storageFailureTrackedRef.current) return;
+    storageFailureTrackedRef.current = true;
+    trackFunnelEvent("draft_storage_failed", "storage");
+  }, [state.storageWarning]);
 
   useEffect(() => {
     const element = dialogRef.current;
@@ -61,6 +78,13 @@ export function GuestBuilderPage({
   }, [dialog]);
 
   const saveLocalDraft = useCallback((draft: FormDraft) => {
+    if (
+      !meaningfulEditTrackedRef.current &&
+      JSON.stringify(draft) !== initialDraftSnapshotRef.current
+    ) {
+      meaningfulEditTrackedRef.current = true;
+      trackFunnelEvent("first_meaningful_edit");
+    }
     const nextGuestDraft: GuestDraft = {
       ...guestDraftRef.current,
       draft,
@@ -80,6 +104,8 @@ export function GuestBuilderPage({
   function startOver() {
     const guestDraft = createGuestDraft();
     guestDraftRef.current = guestDraft;
+    initialDraftSnapshotRef.current = JSON.stringify(guestDraft.draft);
+    meaningfulEditTrackedRef.current = false;
     const result = saveGuestDraft(guestDraft);
     setState({
       guestDraft,
@@ -97,9 +123,11 @@ export function GuestBuilderPage({
     try {
       const guestDraft = guestDraftRef.current;
       const form = await api.claimGuestDraft(guestDraft.id, guestDraft.draft);
+      trackFunnelEvent("draft_claimed");
       clearGuestDraft();
       onClaimed(authenticatedUser, form, pendingIntentRef.current);
     } catch (caughtError) {
+      trackFunnelEvent("claim_failed", failureCategory(caughtError));
       setClaimState("error");
       setClaimError(
         caughtError instanceof Error
@@ -111,11 +139,13 @@ export function GuestBuilderPage({
 
   function requireAccount(draft: FormDraft, intent: BuilderIntent) {
     saveLocalDraft(draft);
+    if (intent === "publish") trackFunnelEvent("publish_selected");
     pendingIntentRef.current = intent;
     setDialog("auth");
     setClaimError(null);
     if (user) void claimDraft(user);
     else {
+      trackFunnelEvent("auth_prompt_shown");
       setClaimUser(null);
       setClaimState("idle");
     }
@@ -186,7 +216,16 @@ export function GuestBuilderPage({
             </section>
           ) : (
             <div className="guest-auth-frame">
-              <AuthForm context="guest" onAuthenticated={(authenticatedUser) => void claimDraft(authenticatedUser)} />
+              <AuthForm
+                context="guest"
+                onAuthenticated={(authenticatedUser) => {
+                  trackFunnelEvent("auth_succeeded");
+                  void claimDraft(authenticatedUser);
+                }}
+                onAuthenticationFailed={(error) => {
+                  trackFunnelEvent("auth_failed", failureCategory(error));
+                }}
+              />
               <button className="guest-auth-dismiss button-reset" type="button" onClick={() => setDialog(null)}>
                 Keep editing without an account
               </button>

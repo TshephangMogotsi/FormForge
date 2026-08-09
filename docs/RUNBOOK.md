@@ -114,6 +114,16 @@ Atlas, SES, DNS, or Cloudflare incident.
 5. Repeated malicious accounts require an account-restriction capability before the
    public trial expands; do not rely only on IP limits.
 
+### Guest funnel review
+
+1. Run `npm run report:funnel --workspace server` with operator-scoped database access.
+2. Review aggregate journey steps and failure categories; the command does not print
+   anonymous/session correlation values or form content.
+3. Treat sudden event-volume changes as possible instrumentation or pollution before
+   interpreting them as conversion changes.
+4. Do not extend the event schema with form, account, or respondent data. Record any
+   material measurement change in `docs/DECISIONS.md`.
+
 ## Secret rotation
 
 1. Create the replacement credential with least privilege.

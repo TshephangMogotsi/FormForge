@@ -6,6 +6,7 @@ type AuthMode = "login" | "register" | "forgot" | "reset";
 
 type AuthFormProps = {
   onAuthenticated: (user: User) => void;
+  onAuthenticationFailed?: (error: unknown) => void;
   resetToken?: string | null;
   context?: "page" | "guest" | "reauth";
 };
@@ -54,6 +55,7 @@ const reauthCopy = {
 
 export function AuthForm({
   onAuthenticated,
+  onAuthenticationFailed,
   resetToken = null,
   context = "page"
 }: AuthFormProps) {
@@ -94,7 +96,6 @@ export function AuthForm({
     try {
       if (mode === "register") {
         const user = await api.register({
-          name: String(data.get("name")),
           email: String(data.get("email")),
           password,
           confirmPassword
@@ -123,6 +124,7 @@ export function AuthForm({
       changeMode("login");
       setNotice("Your password has been reset. Sign in with your new password.");
     } catch (caughtError) {
+      onAuthenticationFailed?.(caughtError);
       setError(caughtError instanceof Error ? caughtError.message : "Authentication failed.");
     } finally {
       setPending(false);
@@ -136,13 +138,6 @@ export function AuthForm({
       <p>{copy.description}</p>
 
       <form onSubmit={handleSubmit}>
-        {mode === "register" && (
-          <label>
-            Name
-            <input name="name" autoComplete="name" minLength={2} maxLength={80} required />
-          </label>
-        )}
-
         {mode !== "reset" && (
           <label>
             Email

@@ -69,8 +69,12 @@ async function seed() {
     user = await UserModel.create({
       name,
       email,
-      passwordHash: await bcrypt.hash(password, 12)
+      passwordHash: await bcrypt.hash(password, 12),
+      emailVerifiedAt: new Date()
     });
+  } else if (!user.emailVerifiedAt) {
+    user.emailVerifiedAt = new Date();
+    await user.save();
   }
 
   const repository = new MongooseFormRepository();

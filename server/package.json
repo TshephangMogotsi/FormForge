@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "seed:demo": "tsx src/scripts/seed-demo.ts",
+    "report:funnel": "tsx src/scripts/report-funnel.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
     "test": "vitest run"
   },

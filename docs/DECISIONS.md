@@ -284,3 +284,18 @@ measured abuse justifies it. Allowing unverified publication was rejected becaus
 would let disposable automated accounts silently host phishing or spam. The account
 caps use owner-scoped count-before-write checks; this is intentionally documented as a
 single-task trial boundary rather than a globally exact distributed quota.
+
+## ADR-026: Use bounded first-party telemetry for the guest acquisition trial
+
+FormForge records the guest-to-publication funnel through a same-origin API and a
+strict event schema. The contract permits only the event name, occurrence time, random
+anonymous/session correlation, sanitized source campaign, device class, and a bounded
+failure category. It deliberately has no generic metadata field and rejects form
+content, account identifiers, respondent data, and unknown properties. Records expire
+after 90 days, and the operator report exposes aggregate counts and conversion only.
+
+A paid analytics vendor was rejected for the initial trial because the small event set
+does not justify another processor, SDK, consent boundary, or recurring cost. Request
+logs alone were rejected because they cannot distinguish meaningful editing or resumed
+intent. The current event and API limits reduce simple pollution but do not make the
+analytics globally exact or bot-proof; trial decisions must account for that limitation.

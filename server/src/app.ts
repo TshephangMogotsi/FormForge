@@ -26,6 +26,9 @@ import { MongooseFormRepository } from "./features/forms/form.repository.js";
 import { createFormRouter } from "./features/forms/form.routes.js";
 import { FormService } from "./features/forms/form.service.js";
 import { createPublicFormRouter } from "./features/forms/public-form.routes.js";
+import { MongooseFunnelRepository } from "./features/funnel/funnel.repository.js";
+import { createFunnelRouter } from "./features/funnel/funnel.routes.js";
+import { FunnelService } from "./features/funnel/funnel.service.js";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
 import { createRateLimiter, rateLimitPolicies } from "./middleware/rate-limit.js";
 import { requestContext } from "./middleware/request-context.js";
@@ -37,6 +40,7 @@ import {
 export type AppServices = {
   auth: AuthService;
   forms: FormService;
+  funnel: FunnelService;
 };
 
 export type AppOptions = {
@@ -74,7 +78,8 @@ function createDefaultServices(): AppServices {
     forms: new FormService(new MongooseFormRepository(), {
       maxFormsPerOwner: env.TRIAL_MAX_FORMS_PER_ACCOUNT,
       maxPublishedFormsPerOwner: env.TRIAL_MAX_PUBLISHED_FORMS_PER_ACCOUNT
-    })
+    }),
+    funnel: new FunnelService(new MongooseFunnelRepository())
   };
 }
 
@@ -113,6 +118,7 @@ export function createApp(
   app.use("/api/v1/auth", createAuthRouter(services.auth));
   app.use("/api/v1/forms", createFormRouter(services.auth, services.forms));
   app.use("/api/v1/public/forms", createPublicFormRouter(services.forms));
+  app.use("/api/v1/events", createFunnelRouter(services.funnel));
 
   if (env.NODE_ENV === "production") {
     app.use(

@@ -44,6 +44,9 @@ import type {
 } from "./features/forms/form.repository.js";
 import type { SubmissionAnswer } from "./features/forms/form.schemas.js";
 import { FormService } from "./features/forms/form.service.js";
+import type { FunnelRepository } from "./features/funnel/funnel.repository.js";
+import type { FunnelEventInput } from "./features/funnel/funnel.schemas.js";
+import { FunnelService } from "./features/funnel/funnel.service.js";
 
 class InMemoryUserRepository implements UserRepository {
   private readonly users = new Map<string, UserRecord>();
@@ -179,6 +182,14 @@ class CapturingEmailVerificationNotifier implements EmailVerificationNotifier {
 
   async send(notification: EmailVerificationNotification): Promise<void> {
     this.latestNotification = notification;
+  }
+}
+
+class InMemoryFunnelRepository implements FunnelRepository {
+  readonly events: Array<FunnelEventInput & { expiresAt: Date }> = [];
+
+  async create(input: FunnelEventInput, expiresAt: Date): Promise<void> {
+    this.events.push({ ...input, expiresAt });
   }
 }
 
@@ -459,6 +470,7 @@ function createTestApp(
   const forms = new InMemoryFormRepository();
   const notifier = new CapturingPasswordResetNotifier();
   const verificationNotifier = new CapturingEmailVerificationNotifier();
+  const funnelRepository = new InMemoryFunnelRepository();
   const auth = new AuthService(
     users,
     new SessionService(new InMemorySessionRepository()),
@@ -481,22 +493,24 @@ function createTestApp(
     app: createApp(
       {
         auth,
-        forms: new FormService(forms, testOptions.formLimits)
+        forms: new FormService(forms, testOptions.formLimits),
+        funnel: new FunnelService(funnelRepository)
       },
       options
     ),
     notifier,
-    verificationNotifier
+    verificationNotifier,
+    funnelRepository
   };
 }
 
 async function register(
   agent: ReturnType<typeof request.agent>,
   email: string,
-  name = "Test User"
+  name?: string
 ) {
   return agent.post("/api/v1/auth/register").send({
-    name,
+    ...(name ? { name } : {}),
     email,
     password: "correct-horse-42",
     confirmPassword: "correct-horse-42"
@@ -574,6 +588,33 @@ describe("FormForge API", () => {
     });
   });
 
+  it("records only the bounded privacy-safe funnel event contract", async () => {
+    const setup = createTestApp();
+    const event = {
+      name: "publish_selected",
+      occurredAt: "2026-08-09T09:00:00.000Z",
+      anonymousId: "b3b2c1d0-7a6f-4f52-91af-2f2a5cf56e21",
+      sessionId: "70b39b40-5fe6-4181-bd80-83f2739010d3",
+      sourceCampaign: "public_trial",
+      deviceClass: "mobile",
+      failureCategory: null
+    };
+    const accepted = await request(setup.app).post("/api/v1/events").send(event);
+    expect(accepted.status).toBe(202);
+    expect(accepted.body).toEqual({});
+    expect(setup.funnelRepository.events[0]).toMatchObject(event);
+    expect(setup.funnelRepository.events[0]!.expiresAt.getTime()).toBeGreaterThan(Date.now());
+
+    const contentLeak = await request(setup.app).post("/api/v1/events").send({
+      ...event,
+      formTitle: "Do not collect this",
+      email: "owner@example.com"
+    });
+    expect(contentLeak.status).toBe(400);
+    expect(contentLeak.body.error.code).toBe("VALIDATION_ERROR");
+    expect(setup.funnelRepository.events).toHaveLength(1);
+  });
+
   it("does not emit cross-origin permissions when production CORS is disabled", async () => {
     const response = await request(createTestApp({ corsOrigin: false }).app)
       .options("/api/health")
@@ -585,13 +626,13 @@ describe("FormForge API", () => {
 
   it("registers a user with a protected cookie and returns the current user", async () => {
     const agent = request.agent(app);
-    const registration = await register(agent, "owner@example.com", "Form Owner");
+    const registration = await register(agent, "owner@example.com");
 
     expect(registration.status).toBe(201);
     expect(registration.headers["set-cookie"]?.[0]).toContain("HttpOnly");
     expect(registration.headers["set-cookie"]?.[0]).toContain("SameSite=Lax");
     expect(registration.body.data.user).toMatchObject({
-      name: "Form Owner",
+      name: "FormForge User",
       email: "owner@example.com"
     });
     expect(registration.body.data.user).not.toHaveProperty("passwordHash");

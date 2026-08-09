@@ -144,7 +144,6 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   async register(input: {
-    name: string;
     email: string;
     password: string;
     confirmPassword: string;

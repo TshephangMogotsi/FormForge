@@ -129,6 +129,21 @@ general API boundary.
 - Builder validation in the browser improves feedback but never replaces the API's
   authoritative validation of every persisted field definition.
 
+## Acquisition measurement boundary
+
+The guest journey sends a first-party, same-origin event envelope to the modular API.
+Its strict schema contains only event name, occurrence time, random anonymous/session
+correlation, sanitized campaign, device class, and a bounded failure category. It has
+no generic metadata field, so form content, account identifiers, and respondent data
+cannot enter the collection through the supported contract. MongoDB removes records
+after 90 days through a TTL index, and `npm run report:funnel --workspace server`
+produces aggregate step and failure-category counts without printing correlation IDs.
+
+The public form, guest builder, and owned builder remain separate lazy chunks. The
+production build enforces a 150 KiB gzip initial-JavaScript budget and a 10 KiB gzip
+public-form route budget; the 2026-08-09 local build measured 76.62 KiB and 1.96 KiB
+respectively.
+
 ## Production reference
 
 The first production shape remains deliberately simple:

@@ -72,7 +72,8 @@
 - [x] Claim guest drafts idempotently through the authenticated API.
 - [x] Resume save or publish intent after authentication.
 - [x] Add first-publication trust and abuse controls.
-- [ ] Add privacy-safe funnel measurement and launch verification.
+- [x] Add privacy-safe funnel measurement and local launch verification.
+- [ ] Configure transactional email and record the approved public-trial rollout and rollback evidence.
 
 Detailed sequencing and exit criteria are in `docs/GUEST_BUILDER_PLAN.md`.
 

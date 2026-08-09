@@ -46,7 +46,7 @@ export class AuthService {
 
     const passwordHash = await hash(input.password, this.passwordCost);
     const user = await this.users.create({
-      name: input.name,
+      name: input.name ?? "FormForge User",
       email: input.email,
       passwordHash
     });
