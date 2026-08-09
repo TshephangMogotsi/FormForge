@@ -81,7 +81,11 @@ jobs:
           secrets: |
             [
               {"name":"MONGODB_URI","valueFrom":"/formforge/production/mongodb-uri"},
-              {"name":"PASSWORD_RESET_FROM_EMAIL","valueFrom":"/formforge/production/password-reset-from-email"}
+              {"name":"PASSWORD_RESET_FROM_EMAIL","valueFrom":"/formforge/production/password-reset-from-email"},
+              {"name":"GOOGLE_OAUTH_CLIENT_ID","valueFrom":"/formforge/production/google-oauth-client-id"},
+              {"name":"GOOGLE_OAUTH_CLIENT_SECRET","valueFrom":"/formforge/production/google-oauth-client-secret"},
+              {"name":"FACEBOOK_APP_ID","valueFrom":"/formforge/production/facebook-app-id"},
+              {"name":"FACEBOOK_APP_SECRET","valueFrom":"/formforge/production/facebook-app-secret"}
             ]
           cpu: "256"
           memory: "512"
