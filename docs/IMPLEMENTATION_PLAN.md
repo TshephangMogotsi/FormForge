@@ -74,6 +74,8 @@
 - [x] Add first-publication trust and abuse controls.
 - [x] Add privacy-safe funnel measurement and local launch verification.
 - [ ] Configure transactional email and record the approved public-trial rollout and rollback evidence.
+- [x] Add optional Google and Facebook login without breaking guest-intent recovery.
+- [ ] Configure provider credentials and complete real-provider callback checks before public rollout.
 
 Detailed sequencing and exit criteria are in `docs/GUEST_BUILDER_PLAN.md`.
 

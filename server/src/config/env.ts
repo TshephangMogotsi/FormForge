@@ -30,6 +30,11 @@ const envSchema = z
       .pipe(z.enum(["true", "false"]))
       .transform((value) => value === "true")
       .default(false),
+    GOOGLE_OAUTH_CLIENT_ID: z.string().trim().min(1).optional(),
+    GOOGLE_OAUTH_CLIENT_SECRET: z.string().trim().min(1).optional(),
+    FACEBOOK_APP_ID: z.string().trim().min(1).optional(),
+    FACEBOOK_APP_SECRET: z.string().trim().min(1).optional(),
+    FACEBOOK_GRAPH_API_VERSION: z.string().regex(/^v\d+\.\d+$/).default("v25.0"),
     TRIAL_MAX_FORMS_PER_ACCOUNT: z.coerce.number().int().min(1).max(100).default(25),
     TRIAL_MAX_PUBLISHED_FORMS_PER_ACCOUNT: z.coerce.number().int().min(1).max(100).default(5)
   })
@@ -46,6 +51,20 @@ const envSchema = z
         code: "custom",
         path: ["PASSWORD_RESET_FROM_EMAIL"],
         message: "PASSWORD_RESET_FROM_EMAIL is required in production."
+      });
+    }
+    if (Boolean(values.GOOGLE_OAUTH_CLIENT_ID) !== Boolean(values.GOOGLE_OAUTH_CLIENT_SECRET)) {
+      context.addIssue({
+        code: "custom",
+        path: ["GOOGLE_OAUTH_CLIENT_ID"],
+        message: "Google OAuth requires both client ID and client secret."
+      });
+    }
+    if (Boolean(values.FACEBOOK_APP_ID) !== Boolean(values.FACEBOOK_APP_SECRET)) {
+      context.addIssue({
+        code: "custom",
+        path: ["FACEBOOK_APP_ID"],
+        message: "Facebook OAuth requires both app ID and app secret."
       });
     }
   });

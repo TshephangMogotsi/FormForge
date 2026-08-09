@@ -1,4 +1,4 @@
-import { FormEvent, useId, useState } from "react";
+import { FormEvent, useEffect, useId, useState } from "react";
 import { LoaderCircle } from "lucide-react";
 import { api, type User } from "../../lib/api";
 
@@ -9,6 +9,8 @@ type AuthFormProps = {
   onAuthenticationFailed?: (error: unknown) => void;
   resetToken?: string | null;
   context?: "page" | "guest" | "reauth";
+  initialError?: string | null;
+  socialReturnTo?: string;
 };
 
 const pageCopy: Record<AuthMode, { eyebrow: string; title: string; description: string }> = {
@@ -57,20 +59,36 @@ export function AuthForm({
   onAuthenticated,
   onAuthenticationFailed,
   resetToken = null,
-  context = "page"
+  context = "page",
+  initialError = null,
+  socialReturnTo = "/dashboard"
 }: AuthFormProps) {
   const titleId = useId();
   const [mode, setMode] = useState<AuthMode>(
     resetToken ? "reset" : context === "reauth" ? "login" : "register"
   );
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError);
   const [notice, setNotice] = useState<string | null>(null);
+  const [socialProviders, setSocialProviders] = useState({ google: false, facebook: false });
   const copy = context === "reauth" && mode === "login"
     ? reauthCopy
     : context === "guest" && (mode === "register" || mode === "login")
       ? guestCopy[mode]
       : pageCopy[mode];
+
+  useEffect(() => {
+    if (context === "reauth") return;
+    let ignore = false;
+    api.authProviders()
+      .then((providers) => {
+        if (!ignore) setSocialProviders(providers);
+      })
+      .catch(() => undefined);
+    return () => {
+      ignore = true;
+    };
+  }, [context]);
 
   function changeMode(nextMode: AuthMode) {
     setMode(nextMode);
@@ -136,6 +154,33 @@ export function AuthForm({
       <span className="eyebrow">{copy.eyebrow}</span>
       <h2 id={titleId}>{copy.title}</h2>
       <p>{copy.description}</p>
+
+      {(mode === "login" || mode === "register") && context !== "reauth" &&
+        (socialProviders.google || socialProviders.facebook) && (
+          <>
+            <div className="social-auth-actions" aria-label="Social sign in options">
+              {socialProviders.google && (
+                <a
+                  className="social-auth-button"
+                  href={`/api/v1/auth/google?returnTo=${encodeURIComponent(socialReturnTo)}`}
+                >
+                  <span className="social-auth-mark google-mark" aria-hidden="true">G</span>
+                  Continue with Google
+                </a>
+              )}
+              {socialProviders.facebook && (
+                <a
+                  className="social-auth-button"
+                  href={`/api/v1/auth/facebook?returnTo=${encodeURIComponent(socialReturnTo)}`}
+                >
+                  <span className="social-auth-mark facebook-mark" aria-hidden="true">f</span>
+                  Continue with Facebook
+                </a>
+              )}
+            </div>
+            <div className="auth-divider"><span>or continue with email</span></div>
+          </>
+        )}
 
       <form onSubmit={handleSubmit}>
         {mode !== "reset" && (

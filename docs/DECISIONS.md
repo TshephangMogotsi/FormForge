@@ -299,3 +299,20 @@ does not justify another processor, SDK, consent boundary, or recurring cost. Re
 logs alone were rejected because they cannot distinguish meaningful editing or resumed
 intent. The current event and API limits reduce simple pollution but do not make the
 analytics globally exact or bot-proof; trial decisions must account for that limitation.
+
+## ADR-027: Adapt social identity into the existing opaque-session boundary
+
+Google and Facebook login use server-side authorization-code adapters and then issue the
+same revocable FormForge session as password login. The browser receives no provider
+token. Short-lived HTTP-only state cookies protect both callbacks; Google additionally
+uses PKCE, nonce, verified ID-token audience, issuer, signature, and email claims. Only
+the minimal identity scopes are requested, external calls have bounded timeouts, and no
+refresh or access token is retained.
+
+Provider subjects are stored as stable identity keys. A Google identity may link by its
+verified email. Facebook does not expose an equivalent verified-email claim in this flow,
+so automatic linking to an existing email is rejected; a new Facebook-backed account must
+complete FormForge email verification before publishing. Client-only implicit tokens and
+blind email linking were rejected because they weaken the existing session and ownership
+boundaries. A hosted authentication platform was not introduced because two providers do
+not yet justify another paid dependency or migration of the established user/session model.

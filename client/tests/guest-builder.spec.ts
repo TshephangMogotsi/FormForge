@@ -76,12 +76,14 @@ async function mockClaimFlow(
     failFirstClaim?: boolean;
     failFirstPublish?: boolean;
     requireEmailVerification?: boolean;
+    socialProviders?: boolean;
+    initiallyAuthenticated?: boolean;
   } = {}
 ) {
   let claimedForm: Record<string, unknown> | null = null;
   let claimAttempts = 0;
   let publishAttempts = 0;
-  let authenticated = false;
+  let authenticated = options.initiallyAuthenticated ?? false;
   let currentUser = {
     ...user,
     emailVerifiedAt: options.requireEmailVerification ? null : "2026-08-09T08:00:00.000Z"
@@ -97,6 +99,16 @@ async function mockClaimFlow(
     if (path === "/api/v1/events" && request.method() === "POST") {
       funnelEvents.push(request.postDataJSON() as Record<string, unknown>);
       return json(route, {}, 202);
+    }
+    if (path === "/api/v1/auth/providers") {
+      return json(route, {
+        data: {
+          providers: {
+            google: options.socialProviders ?? false,
+            facebook: options.socialProviders ?? false
+          }
+        }
+      });
     }
     if (path === "/api/v1/auth/me") {
       if (authenticated) return json(route, { data: { user: currentUser } });
@@ -243,7 +255,7 @@ test("creates an account, claims the local draft, and resumes publishing", async
 
 test("keeps the guest publish gate usable at 360 pixels with keyboard controls", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
-  await mockClaimFlow(page);
+  await mockClaimFlow(page, { socialProviders: true });
   await page.goto("/build/new");
 
   const publishButton = page.getByRole("button", { name: "Publish" });
@@ -253,11 +265,47 @@ test("keeps the guest publish gate usable at 360 pixels with keyboard controls",
   const dialog = page.getByRole("dialog", { name: "Save this form to your account" });
   await expect(dialog.getByRole("heading", { name: "Create a free account" })).toBeVisible();
   await expect(dialog.getByLabel("Email")).toBeVisible();
+  await expect(dialog.getByRole("link", { name: "Continue with Google" })).toHaveAttribute(
+    "href",
+    "/api/v1/auth/google?returnTo=%2Fbuild%2Fnew%3Fresume%3Dpublish"
+  );
+  await expect(dialog.getByRole("link", { name: "Continue with Facebook" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
   await page.keyboard.press("Escape");
   await expect(dialog).not.toBeVisible();
   await expect(publishButton).toBeFocused();
+});
+
+test("resumes claiming and publishing a local draft after social sign-in redirects back", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("formforge.guest-draft.v1", JSON.stringify({
+      version: 1,
+      id: "8a6ea548-2082-45c7-9f30-3f532b9e259e",
+      updatedAt: "2026-08-09T09:00:00.000Z",
+      draft: {
+        title: "Social sign-in draft",
+        description: "",
+        fields: [{
+          id: "c1e6a93f-94bc-4da5-8984-88e17572adf0",
+          type: "shortText",
+          label: "Your name",
+          description: "",
+          placeholder: "",
+          required: true,
+          options: []
+        }]
+      }
+    }));
+  });
+  const requests = await mockClaimFlow(page, { initiallyAuthenticated: true });
+  await page.goto("/build/new?resume=publish");
+
+  await expect(page).toHaveURL(`/forms/${ownedFormId}/edit`);
+  await expect(page.getByText("Form is live")).toBeVisible();
+  expect(requests.claimAttempts).toBe(1);
+  expect(requests.publishAttempts).toBe(1);
+  expect(requests.claimBodies[0].title).toBe("Social sign-in draft");
 });
 
 test("keeps the claimed account draft when resumed publication fails and retries", async ({ page }) => {

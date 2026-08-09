@@ -20,6 +20,7 @@
     "dotenv": "latest",
     "express": "latest",
     "express-rate-limit": "latest",
+    "google-auth-library": "^10.9.1",
     "helmet": "latest",
     "mongoose": "latest",
     "zod": "latest"

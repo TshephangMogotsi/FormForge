@@ -143,6 +143,13 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  async authProviders() {
+    const response = await apiRequest<{
+      data: { providers: { google: boolean; facebook: boolean } };
+    }>("/api/v1/auth/providers");
+    return response.data.providers;
+  },
+
   async register(input: {
     email: string;
     password: string;

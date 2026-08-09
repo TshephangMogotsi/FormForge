@@ -4,14 +4,26 @@ import type { User } from "../../lib/api";
 import { AuthForm } from "./AuthForm";
 
 export function AuthPage({ onAuthenticated }: { onAuthenticated: (user: User) => void }) {
-  const [resetToken] = useState(() =>
-    new URLSearchParams(window.location.search).get("resetToken")
-  );
+  const [initialQuery] = useState(() => {
+    const query = new URLSearchParams(window.location.search);
+    return {
+      resetToken: query.get("resetToken"),
+      oauthError: query.get("oauthError"),
+      returnTo: query.get("returnTo")
+    };
+  });
   useEffect(() => {
-    if (resetToken) {
+    if (initialQuery.resetToken || initialQuery.oauthError) {
       window.history.replaceState({}, "", window.location.pathname);
     }
-  }, [resetToken]);
+  }, [initialQuery]);
+
+  const oauthError = initialQuery.oauthError
+    ? "Social sign-in could not be completed. Please try again or continue with email."
+    : null;
+  const socialReturnTo = initialQuery.returnTo === "/build/new"
+    ? "/build/new?resume=save"
+    : "/dashboard";
 
   return (
     <main className="auth-page">
@@ -35,7 +47,12 @@ export function AuthPage({ onAuthenticated }: { onAuthenticated: (user: User) =>
         </ul>
       </section>
 
-      <AuthForm onAuthenticated={onAuthenticated} resetToken={resetToken} />
+      <AuthForm
+        initialError={oauthError}
+        onAuthenticated={onAuthenticated}
+        resetToken={initialQuery.resetToken}
+        socialReturnTo={socialReturnTo}
+      />
     </main>
   );
 }

@@ -22,6 +22,9 @@ import { SessionService } from "./features/auth/session.service.js";
 import { SesPasswordResetNotifier } from "./features/auth/ses-password-reset.notifier.js";
 import { SesEmailVerificationNotifier } from "./features/auth/ses-email-verification.notifier.js";
 import { MongooseUserRepository } from "./features/auth/user.repository.js";
+import { GoogleOAuthProvider } from "./features/auth/google-oauth.provider.js";
+import { FacebookOAuthProvider } from "./features/auth/facebook-oauth.provider.js";
+import type { SocialOAuthProvider } from "./features/auth/social-oauth.provider.js";
 import { MongooseFormRepository } from "./features/forms/form.repository.js";
 import { createFormRouter } from "./features/forms/form.routes.js";
 import { FormService } from "./features/forms/form.service.js";
@@ -41,6 +44,7 @@ export type AppServices = {
   auth: AuthService;
   forms: FormService;
   funnel: FunnelService;
+  socialOAuthProviders: SocialOAuthProvider[];
 };
 
 export type AppOptions = {
@@ -57,6 +61,27 @@ function createDefaultServices(): AppServices {
   const emailVerificationNotifier = env.PASSWORD_RESET_FROM_EMAIL
     ? new SesEmailVerificationNotifier(env.PASSWORD_RESET_FROM_EMAIL)
     : new DisabledEmailVerificationNotifier();
+
+  const socialOAuthProviders: SocialOAuthProvider[] = [];
+  if (env.GOOGLE_OAUTH_CLIENT_ID && env.GOOGLE_OAUTH_CLIENT_SECRET) {
+    socialOAuthProviders.push(
+      new GoogleOAuthProvider(
+        env.GOOGLE_OAUTH_CLIENT_ID,
+        env.GOOGLE_OAUTH_CLIENT_SECRET,
+        new URL("/api/v1/auth/google/callback", env.PUBLIC_APP_ORIGIN).toString()
+      )
+    );
+  }
+  if (env.FACEBOOK_APP_ID && env.FACEBOOK_APP_SECRET) {
+    socialOAuthProviders.push(
+      new FacebookOAuthProvider(
+        env.FACEBOOK_APP_ID,
+        env.FACEBOOK_APP_SECRET,
+        new URL("/api/v1/auth/facebook/callback", env.PUBLIC_APP_ORIGIN).toString(),
+        env.FACEBOOK_GRAPH_API_VERSION
+      )
+    );
+  }
 
   return {
     auth: new AuthService(
@@ -79,7 +104,8 @@ function createDefaultServices(): AppServices {
       maxFormsPerOwner: env.TRIAL_MAX_FORMS_PER_ACCOUNT,
       maxPublishedFormsPerOwner: env.TRIAL_MAX_PUBLISHED_FORMS_PER_ACCOUNT
     }),
-    funnel: new FunnelService(new MongooseFunnelRepository())
+    funnel: new FunnelService(new MongooseFunnelRepository()),
+    socialOAuthProviders
   };
 }
 
@@ -115,7 +141,7 @@ export function createApp(
     createHealthRouter(options.databaseReadinessCheck)
   );
   app.use("/api", createRateLimiter(rateLimitPolicies.api));
-  app.use("/api/v1/auth", createAuthRouter(services.auth));
+  app.use("/api/v1/auth", createAuthRouter(services.auth, services.socialOAuthProviders));
   app.use("/api/v1/forms", createFormRouter(services.auth, services.forms));
   app.use("/api/v1/public/forms", createPublicFormRouter(services.forms));
   app.use("/api/v1/events", createFunnelRouter(services.funnel));

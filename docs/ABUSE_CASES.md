@@ -46,6 +46,14 @@ writes; move counters into an atomic shared boundary before scaling writers hori
 - Repeated distributed attacks require an edge control such as AWS WAF; the current
   per-task limiter alone does not stop a botnet rotating source IPs.
 
+### Social-login substitution and account linking
+
+- Every callback must match a short-lived, HTTP-only state cookie; Google also requires PKCE and nonce.
+- Redirect destinations are limited to the dashboard or the guest builder's save/publish resume intent.
+- Google identity tokens require the configured audience and a verified email claim.
+- Facebook identities are keyed by provider subject and cannot silently attach to an existing email.
+- Provider tokens are discarded after login and never enter browser storage or application logs.
+
 ### Password-reset enumeration and spam
 
 - Known and unknown email addresses receive the same `202` response.

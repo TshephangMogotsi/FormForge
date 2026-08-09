@@ -45,8 +45,24 @@ export function GuestBuilderPage({
   user: User | null;
   onClaimed: (user: User, form: FormSummary, intent: BuilderIntent) => void;
 }) {
+  const oauthQueryRef = useRef(
+    (() => {
+      const query = new URLSearchParams(window.location.search);
+      const resumeCandidate = query.get("resume");
+      const resume: BuilderIntent | null =
+        resumeCandidate === "save" || resumeCandidate === "publish"
+          ? resumeCandidate
+          : null;
+      return {
+        resume,
+        error: query.get("oauthError")
+      };
+    })()
+  );
   const [state, setState] = useState(initializeGuestDraft);
-  const [dialog, setDialog] = useState<GuestDialog>(null);
+  const [dialog, setDialog] = useState<GuestDialog>(
+    oauthQueryRef.current.error ? "auth" : null
+  );
   const [claimUser, setClaimUser] = useState<User | null>(null);
   const [claimState, setClaimState] = useState<ClaimState>("idle");
   const [claimError, setClaimError] = useState<string | null>(null);
@@ -56,6 +72,7 @@ export function GuestBuilderPage({
   const builderOpenedTrackedRef = useRef(false);
   const meaningfulEditTrackedRef = useRef(false);
   const storageFailureTrackedRef = useRef(false);
+  const oauthResumeStartedRef = useRef(false);
   const pendingIntentRef = useRef<BuilderIntent>("save");
 
   useEffect(() => {
@@ -69,6 +86,22 @@ export function GuestBuilderPage({
     storageFailureTrackedRef.current = true;
     trackFunnelEvent("draft_storage_failed", "storage");
   }, [state.storageWarning]);
+
+  useEffect(() => {
+    const resume = oauthQueryRef.current.resume;
+    if (!user || !resume || oauthResumeStartedRef.current) return;
+    oauthResumeStartedRef.current = true;
+    pendingIntentRef.current = resume;
+    window.history.replaceState({}, "", "/build/new");
+    trackFunnelEvent("auth_succeeded");
+    void claimDraft(user);
+  }, [user]);
+
+  useEffect(() => {
+    if (!oauthQueryRef.current.error) return;
+    window.history.replaceState({}, "", "/build/new");
+    trackFunnelEvent("auth_failed", "authentication");
+  }, []);
 
   useEffect(() => {
     const element = dialogRef.current;
@@ -218,6 +251,9 @@ export function GuestBuilderPage({
             <div className="guest-auth-frame">
               <AuthForm
                 context="guest"
+                initialError={oauthQueryRef.current.error
+                  ? "Social sign-in could not be completed. Please try again or continue with email."
+                  : null}
                 onAuthenticated={(authenticatedUser) => {
                   trackFunnelEvent("auth_succeeded");
                   void claimDraft(authenticatedUser);
@@ -225,6 +261,7 @@ export function GuestBuilderPage({
                 onAuthenticationFailed={(error) => {
                   trackFunnelEvent("auth_failed", failureCategory(error));
                 }}
+                socialReturnTo={`/build/new?resume=${pendingIntentRef.current}`}
               />
               <button className="guest-auth-dismiss button-reset" type="button" onClick={() => setDialog(null)}>
                 Keep editing without an account

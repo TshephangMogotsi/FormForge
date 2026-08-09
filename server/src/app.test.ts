@@ -47,6 +47,30 @@ import { FormService } from "./features/forms/form.service.js";
 import type { FunnelRepository } from "./features/funnel/funnel.repository.js";
 import type { FunnelEventInput } from "./features/funnel/funnel.schemas.js";
 import { FunnelService } from "./features/funnel/funnel.service.js";
+import type {
+  SocialAuthorizationInput,
+  SocialCodeInput,
+  SocialOAuthProvider,
+  SocialProfile
+} from "./features/auth/social-oauth.provider.js";
+
+class FakeSocialOAuthProvider implements SocialOAuthProvider {
+  lastCodeInput: SocialCodeInput | null = null;
+
+  constructor(
+    readonly name: "google" | "facebook",
+    private readonly profile: SocialProfile
+  ) {}
+
+  authorizationUrl(input: SocialAuthorizationInput): string {
+    return `https://identity.example/${this.name}?state=${encodeURIComponent(input.state)}`;
+  }
+
+  async exchangeCode(input: SocialCodeInput): Promise<SocialProfile> {
+    this.lastCodeInput = input;
+    return this.profile;
+  }
+}
 
 class InMemoryUserRepository implements UserRepository {
   private readonly users = new Map<string, UserRecord>();
@@ -58,7 +82,11 @@ class InMemoryUserRepository implements UserRepository {
     const now = new Date();
     const user: UserRecord = {
       ...input,
-      emailVerifiedAt: this.verifiedByDefault ? new Date() : null,
+      emailVerifiedAt: "emailVerifiedAt" in input
+        ? input.emailVerifiedAt ?? null
+        : this.verifiedByDefault ? new Date() : null,
+      googleSubject: input.googleSubject ?? null,
+      facebookSubject: input.facebookSubject ?? null,
       id: this.nextId.toString(16).padStart(24, "0"),
       createdAt: now,
       updatedAt: now
@@ -74,6 +102,33 @@ class InMemoryUserRepository implements UserRepository {
 
   async findById(userId: string): Promise<UserRecord | null> {
     return this.users.get(userId) ?? null;
+  }
+
+  async findBySocialIdentity(
+    provider: "google" | "facebook",
+    subject: string
+  ): Promise<UserRecord | null> {
+    const field = provider === "google" ? "googleSubject" : "facebookSubject";
+    return [...this.users.values()].find((user) => user[field] === subject) ?? null;
+  }
+
+  async linkSocialIdentity(
+    userId: string,
+    provider: "google" | "facebook",
+    subject: string,
+    verifiedAt: Date | null
+  ): Promise<UserRecord | null> {
+    const user = this.users.get(userId);
+    if (!user) return null;
+    const field = provider === "google" ? "googleSubject" : "facebookSubject";
+    const updated = {
+      ...user,
+      [field]: subject,
+      emailVerifiedAt: verifiedAt ?? user.emailVerifiedAt,
+      updatedAt: new Date()
+    };
+    this.users.set(userId, updated);
+    return updated;
   }
 
   async updatePasswordHash(userId: string, passwordHash: string): Promise<boolean> {
@@ -464,6 +519,7 @@ function createTestApp(
   testOptions: {
     verifiedByDefault?: boolean;
     formLimits?: { maxFormsPerOwner: number; maxPublishedFormsPerOwner: number };
+    socialOAuthProviders?: SocialOAuthProvider[];
   } = {}
 ) {
   const users = new InMemoryUserRepository(testOptions.verifiedByDefault ?? true);
@@ -494,7 +550,8 @@ function createTestApp(
       {
         auth,
         forms: new FormService(forms, testOptions.formLimits),
-        funnel: new FunnelService(funnelRepository)
+        funnel: new FunnelService(funnelRepository),
+        socialOAuthProviders: testOptions.socialOAuthProviders ?? []
       },
       options
     ),
@@ -640,6 +697,113 @@ describe("FormForge API", () => {
     const currentUser = await agent.get("/api/v1/auth/me");
     expect(currentUser.status).toBe(200);
     expect(currentUser.body.data.user.email).toBe("owner@example.com");
+  });
+
+  it("completes Google OAuth with state, PKCE, verified email, and the normal session cookie", async () => {
+    const google = new FakeSocialOAuthProvider("google", {
+      provider: "google",
+      subject: "google-subject-1",
+      email: "google.user@example.com",
+      emailVerified: true,
+      name: "Google User"
+    });
+    const setup = createTestApp(undefined, { socialOAuthProviders: [google] });
+    const agent = request.agent(setup.app);
+
+    const providers = await agent.get("/api/v1/auth/providers");
+    expect(providers.body.data.providers).toEqual({ google: true, facebook: false });
+    const started = await agent
+      .get("/api/v1/auth/google")
+      .query({ returnTo: "/build/new?resume=publish" });
+    expect(started.status).toBe(302);
+    const state = new URL(started.headers.location).searchParams.get("state");
+    expect(state).toEqual(expect.any(String));
+
+    const completed = await agent
+      .get("/api/v1/auth/google/callback")
+      .query({ code: "one-time-code", state });
+    expect(completed.status).toBe(303);
+    expect(completed.headers.location).toBe("/build/new?resume=publish");
+    expect(completed.headers["set-cookie"]?.join(";")).toContain("formforge_session=");
+    expect(google.lastCodeInput).toMatchObject({ code: "one-time-code" });
+    expect(google.lastCodeInput!.nonce.length).toBeGreaterThan(20);
+    expect(google.lastCodeInput!.codeVerifier.length).toBeGreaterThan(40);
+
+    const currentUser = await agent.get("/api/v1/auth/me");
+    expect(currentUser.body.data.user).toMatchObject({
+      email: "google.user@example.com",
+      emailVerifiedAt: expect.any(String),
+      name: "Google User"
+    });
+  });
+
+  it("creates an unverified Facebook account without silently linking an existing email", async () => {
+    const facebook = new FakeSocialOAuthProvider("facebook", {
+      provider: "facebook",
+      subject: "facebook-subject-1",
+      email: "facebook.user@example.com",
+      emailVerified: false,
+      name: "Facebook User"
+    });
+    const setup = createTestApp(undefined, {
+      verifiedByDefault: false,
+      socialOAuthProviders: [facebook]
+    });
+    const agent = request.agent(setup.app);
+    const started = await agent.get("/api/v1/auth/facebook");
+    const state = new URL(started.headers.location).searchParams.get("state");
+    const completed = await agent
+      .get("/api/v1/auth/facebook/callback")
+      .query({ code: "facebook-code", state });
+    expect(completed.status).toBe(303);
+    expect((await agent.get("/api/v1/auth/me")).body.data.user).toMatchObject({
+      email: "facebook.user@example.com",
+      emailVerifiedAt: null
+    });
+    expect(setup.verificationNotifier.latestNotification?.recipientEmail).toBe(
+      "facebook.user@example.com"
+    );
+
+    const conflictingFacebook = new FakeSocialOAuthProvider("facebook", {
+      provider: "facebook",
+      subject: "facebook-subject-2",
+      email: "existing@example.com",
+      emailVerified: false,
+      name: "Different Facebook User"
+    });
+    const conflictSetup = createTestApp(undefined, {
+      verifiedByDefault: false,
+      socialOAuthProviders: [conflictingFacebook]
+    });
+    await register(request.agent(conflictSetup.app), "existing@example.com");
+    const conflictAgent = request.agent(conflictSetup.app);
+    const conflictStart = await conflictAgent.get("/api/v1/auth/facebook");
+    const conflictState = new URL(conflictStart.headers.location).searchParams.get("state");
+    const conflict = await conflictAgent
+      .get("/api/v1/auth/facebook/callback")
+      .query({ code: "facebook-code", state: conflictState });
+    expect(conflict.status).toBe(303);
+    expect(conflict.headers.location).toBe("/dashboard?oauthError=social_email_conflict");
+    expect((await conflictAgent.get("/api/v1/auth/me")).status).toBe(401);
+  });
+
+  it("rejects a social OAuth callback whose state does not match its HTTP-only cookie", async () => {
+    const google = new FakeSocialOAuthProvider("google", {
+      provider: "google",
+      subject: "google-subject-2",
+      email: "safe@example.com",
+      emailVerified: true,
+      name: "Safe User"
+    });
+    const setup = createTestApp(undefined, { socialOAuthProviders: [google] });
+    const agent = request.agent(setup.app);
+    await agent.get("/api/v1/auth/google");
+    const rejected = await agent
+      .get("/api/v1/auth/google/callback")
+      .query({ code: "attacker-code", state: "x".repeat(32) });
+    expect(rejected.status).toBe(400);
+    expect(rejected.body.error.code).toBe("INVALID_OAUTH_STATE");
+    expect(google.lastCodeInput).toBeNull();
   });
 
   it("requires single-use email verification before first publication", async () => {

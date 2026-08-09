@@ -10,9 +10,13 @@ import type {
 import { EmailVerificationService } from "./email-verification.service.js";
 import { PasswordResetService } from "./password-reset.service.js";
 import { SessionService } from "./session.service.js";
+import type { SocialProfile } from "./social-oauth.provider.js";
 import type { UserRecord, UserRepository } from "./user.repository.js";
 
-export type PublicUser = Omit<UserRecord, "passwordHash" | "updatedAt">;
+export type PublicUser = Omit<
+  UserRecord,
+  "passwordHash" | "googleSubject" | "facebookSubject" | "updatedAt"
+>;
 
 export type AuthResult = {
   user: PublicUser;
@@ -60,12 +64,66 @@ export class AuthService {
 
   async login(input: LoginInput): Promise<AuthResult> {
     const user = await this.users.findByEmail(input.email);
-    const validPassword = user ? await compare(input.password, user.passwordHash) : false;
+    const validPassword = user?.passwordHash
+      ? await compare(input.password, user.passwordHash)
+      : false;
 
     if (!user || !validPassword) {
       throw new AppError(401, "INVALID_CREDENTIALS", "Email or password is incorrect.");
     }
 
+    return {
+      user: toPublicUser(user),
+      token: await this.sessions.issue(user.id)
+    };
+  }
+
+  async authenticateSocial(profile: SocialProfile): Promise<AuthResult> {
+    let user = await this.users.findBySocialIdentity(profile.provider, profile.subject);
+    const verifiedAt = profile.emailVerified ? new Date() : null;
+
+    if (user) {
+      if (verifiedAt && !user.emailVerifiedAt) {
+        user = await this.users.linkSocialIdentity(
+          user.id,
+          profile.provider,
+          profile.subject,
+          verifiedAt
+        );
+      }
+    } else {
+      const existingEmailUser = await this.users.findByEmail(profile.email);
+      if (existingEmailUser) {
+        if (!profile.emailVerified) {
+          throw new AppError(
+            409,
+            "SOCIAL_EMAIL_CONFLICT",
+            "Sign in with your existing method before connecting Facebook."
+          );
+        }
+        user = await this.users.linkSocialIdentity(
+          existingEmailUser.id,
+          profile.provider,
+          profile.subject,
+          verifiedAt
+        );
+      } else {
+        user = await this.users.create({
+          name: profile.name,
+          email: profile.email,
+          emailVerifiedAt: verifiedAt,
+          passwordHash: null,
+          ...(profile.provider === "google"
+            ? { googleSubject: profile.subject }
+            : { facebookSubject: profile.subject })
+        });
+        if (!profile.emailVerified) await this.emailVerifications.request(user);
+      }
+    }
+
+    if (!user) {
+      throw new AppError(500, "SOCIAL_AUTH_FAILED", "The social account could not be connected.");
+    }
     return {
       user: toPublicUser(user),
       token: await this.sessions.issue(user.id)
@@ -125,7 +183,9 @@ export class AuthService {
 
   async changeEmail(userId: string, input: ChangeEmailInput): Promise<PublicUser> {
     const user = await this.users.findById(userId);
-    const validPassword = user ? await compare(input.password, user.passwordHash) : false;
+    const validPassword = user?.passwordHash
+      ? await compare(input.password, user.passwordHash)
+      : false;
     if (!user || !validPassword) {
       throw new AppError(401, "INVALID_CREDENTIALS", "Your password is incorrect.");
     }

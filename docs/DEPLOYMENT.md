@@ -134,11 +134,30 @@ repository's `.env` file.
 | `REQUIRE_TRANSACTIONAL_EMAIL` | Fail startup when the required SES sender is absent |
 | `TRIAL_MAX_FORMS_PER_ACCOUNT` | Private plus published forms allowed per trial account |
 | `TRIAL_MAX_PUBLISHED_FORMS_PER_ACCOUNT` | Distinct live forms allowed per trial account |
+| `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` | Optional Google web OAuth credentials |
+| `FACEBOOK_APP_ID` / `FACEBOOK_APP_SECRET` | Optional Facebook Login credentials |
+| `FACEBOOK_GRAPH_API_VERSION` | Pinned Meta Graph API version; currently `v25.0` |
 
 The production workflow sets `REQUIRE_TRANSACTIONAL_EMAIL=true`, so configuration
 validation requires the SES sender. The service will not start with a publication gate
 whose verification email cannot be delivered. Isolated previews leave this false until
 their own safe mail-delivery path is configured.
+
+## Social-login provider setup
+
+Social buttons remain hidden unless the corresponding ID and secret are both present.
+Create web credentials in each provider console and register the exact callbacks:
+
+- Local Google: `http://localhost:5173/api/v1/auth/google/callback`
+- Local Facebook: `http://localhost:5173/api/v1/auth/facebook/callback`
+- Production Google: `${PUBLIC_APP_ORIGIN}/api/v1/auth/google/callback`
+- Production Facebook: `${PUBLIC_APP_ORIGIN}/api/v1/auth/facebook/callback`
+
+Google requires the `openid email profile` scopes. Facebook Login requires
+`public_profile,email`; configure the privacy-policy and data-deletion surfaces required
+by Meta before changing the app to live mode. Store client/app secrets as SSM
+`SecureString` values and expose them through the ECS task `secrets` list only after the
+parameters exist. Do not place either secret in GitHub variables, source, or build output.
 
 ## Verified release record
 

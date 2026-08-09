@@ -122,6 +122,10 @@ general API boundary.
   resource returns `404` so its existence is not disclosed.
 - Public slugs identify published forms but do not grant owner access.
 - HTTP-only cookies are inaccessible to application JavaScript.
+- Google and Facebook use server-side authorization-code adapters behind one social
+  identity interface. Random state, Google PKCE and nonce checks protect the callback;
+  provider tokens are discarded after the bounded profile exchange. The resulting
+  FormForge session uses the same revocable opaque cookie as password login.
 - SameSite cookies, JSON-only request bodies, origin-aware CORS, rate limiting,
   request-size limits, and security headers reduce common browser and API attacks.
 - Secrets stay in runtime configuration and never enter logs or source control.
@@ -141,7 +145,7 @@ produces aggregate step and failure-category counts without printing correlation
 
 The public form, guest builder, and owned builder remain separate lazy chunks. The
 production build enforces a 150 KiB gzip initial-JavaScript budget and a 10 KiB gzip
-public-form route budget; the 2026-08-09 local build measured 76.62 KiB and 1.96 KiB
+public-form route budget; the 2026-08-09 local build measured 76.98 KiB and 1.96 KiB
 respectively.
 
 ## Production reference
@@ -182,6 +186,11 @@ application boundary.
 Password-reset delivery is behind a notifier interface. The production adapter
 uses the ECS application task role to call Amazon SES from one verified sender;
 the domain service remains independent of AWS.
+
+Social identity providers are optional runtime adapters. Google ID tokens are verified
+with Google's maintained Node library and a fixed client audience. Facebook profile
+requests are pinned to a configured Graph API version. Both adapters use eight-second
+timeouts and request only identity scopes; no refresh or provider access token is stored.
 
 The no-cost MVP uses Atlas's public TLS endpoint because Free and Flex clusters do not
 support PrivateLink and ECS Express tasks do not have stable public addresses. A broad

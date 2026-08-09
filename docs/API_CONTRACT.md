@@ -35,6 +35,10 @@ readiness.
 
 - `POST /api/v1/auth/register` — creates a user and opaque session cookie.
 - `POST /api/v1/auth/login` — verifies credentials and creates a new session.
+- `GET /api/v1/auth/providers` — reports whether Google and Facebook login are configured.
+- `GET /api/v1/auth/google` and `/facebook` — start a server-side authorization-code flow.
+- `GET /api/v1/auth/google/callback` and `/facebook/callback` — validate transient state,
+  establish the normal opaque session, and return to an allowlisted local path.
 - `POST /api/v1/auth/forgot-password` — accepts an email and always returns the
   same `202` response, whether or not the account exists.
 - `POST /api/v1/auth/reset-password` — consumes a single-use reset token,
@@ -61,6 +65,12 @@ stored, and consuming a token atomically deletes it.
 Public users include `emailVerifiedAt`, which is `null` until verification. Verification
 tokens expire after 60 minutes by default, are stored only as SHA-256 digests, and are
 replaced whenever a link is resent or the email changes.
+
+Social login uses ten-minute HTTP-only transient cookies for CSRF state, return intent,
+and Google PKCE/nonce values. Provider access and identity tokens are verified server-side,
+are never returned to the browser, and are not persisted. A verified Google email may
+link to the matching local account. Facebook email does not silently link an existing
+account and remains subject to FormForge email verification before publication.
 
 ## Forms
 

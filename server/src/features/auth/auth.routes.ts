@@ -1,5 +1,6 @@
 import type { CookieOptions } from "express";
 import { Router } from "express";
+import { z } from "zod";
 import { env } from "../../config/env.js";
 import { AppError } from "../../lib/app-error.js";
 import { asyncHandler } from "../../lib/async-handler.js";
@@ -18,6 +19,8 @@ import {
 } from "./auth.schemas.js";
 import { requireAuthentication } from "./auth.middleware.js";
 import type { AuthService } from "./auth.service.js";
+import { safeOAuthReturnTo, SocialOAuthFlow } from "./social-oauth.flow.js";
+import type { SocialOAuthProvider } from "./social-oauth.provider.js";
 
 const authCookieOptions: CookieOptions = {
   httpOnly: true,
@@ -27,11 +30,127 @@ const authCookieOptions: CookieOptions = {
   maxAge: env.SESSION_TTL_HOURS * 60 * 60 * 1000
 };
 
-export function createAuthRouter(authService: AuthService) {
+const socialStartSchema = z.object({ returnTo: z.string().max(200).optional() }).passthrough();
+const socialCallbackSchema = z
+  .object({
+    code: z.string().min(1).max(2_048).optional(),
+    state: z.string().min(20).max(200).optional(),
+    error: z.string().max(200).optional()
+  })
+  .passthrough();
+
+function socialCookieNames(provider: string) {
+  const prefix = `formforge_${provider}_oauth`;
+  return {
+    state: `${prefix}_state`,
+    nonce: `${prefix}_nonce`,
+    verifier: `${prefix}_verifier`,
+    returnTo: `${prefix}_return_to`
+  };
+}
+
+function socialCookieOptions(provider: string): CookieOptions {
+  return {
+    httpOnly: true,
+    secure: env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: `/api/v1/auth/${provider}`,
+    maxAge: 10 * 60 * 1000
+  };
+}
+
+function socialErrorReturnTo(returnTo: string, error: string): string {
+  const url = new URL(safeOAuthReturnTo(returnTo), env.PUBLIC_APP_ORIGIN);
+  url.searchParams.set("oauthError", error);
+  return `${url.pathname}${url.search}`;
+}
+
+export function createAuthRouter(
+  authService: AuthService,
+  socialProviders: SocialOAuthProvider[] = []
+) {
   const router = Router();
   const credentialLimiter = createRateLimiter(rateLimitPolicies.credentials);
   const recoveryLimiter = createRateLimiter(rateLimitPolicies.passwordRecovery);
   const verificationLimiter = createRateLimiter(rateLimitPolicies.emailVerification);
+
+  router.get("/providers", (_request, response) => {
+    const enabled = new Set(socialProviders.map((provider) => provider.name));
+    response.json({
+      data: {
+        providers: {
+          google: enabled.has("google"),
+          facebook: enabled.has("facebook")
+        }
+      }
+    });
+  });
+
+  for (const provider of socialProviders) {
+    const flow = new SocialOAuthFlow(provider);
+    const names = socialCookieNames(provider.name);
+    const cookieOptions = socialCookieOptions(provider.name);
+
+    router.get(
+      `/${provider.name}`,
+      credentialLimiter,
+      asyncHandler(async (request, response) => {
+        const input = socialStartSchema.parse(request.query);
+        const { url, transient } = flow.start(input.returnTo);
+        response.cookie(names.state, transient.state, cookieOptions);
+        response.cookie(names.nonce, transient.nonce, cookieOptions);
+        response.cookie(names.verifier, transient.codeVerifier, cookieOptions);
+        response.cookie(names.returnTo, transient.returnTo, cookieOptions);
+        response.redirect(url);
+      })
+    );
+
+    router.get(
+      `/${provider.name}/callback`,
+      credentialLimiter,
+      asyncHandler(async (request, response) => {
+        const input = socialCallbackSchema.parse(request.query);
+        const transient = {
+          state: String(request.cookies[names.state] ?? ""),
+          nonce: String(request.cookies[names.nonce] ?? ""),
+          codeVerifier: String(request.cookies[names.verifier] ?? ""),
+          returnTo: safeOAuthReturnTo(request.cookies[names.returnTo])
+        };
+        const clearOptions = { ...cookieOptions, maxAge: undefined };
+        response.clearCookie(names.state, clearOptions);
+        response.clearCookie(names.nonce, clearOptions);
+        response.clearCookie(names.verifier, clearOptions);
+        response.clearCookie(names.returnTo, clearOptions);
+
+        if (!input.state || !transient.state) {
+          throw new AppError(
+            400,
+            "INVALID_OAUTH_STATE",
+            "The social sign-in request expired or was invalid."
+          );
+        }
+        flow.validateState(input.state, transient.state);
+        if (input.error) {
+          response.redirect(socialErrorReturnTo(transient.returnTo, `${provider.name}_cancelled`));
+          return;
+        }
+        if (!input.code || !transient.nonce || !transient.codeVerifier) {
+          throw new AppError(400, "INVALID_OAUTH_CALLBACK", "The social sign-in response was incomplete.");
+        }
+
+        try {
+          const profile = await flow.complete(input.code, input.state, transient);
+          const result = await authService.authenticateSocial(profile);
+          response.cookie(authCookieName, result.token, authCookieOptions);
+          response.redirect(303, transient.returnTo);
+        } catch (error) {
+          if (error instanceof AppError && error.code === "INVALID_OAUTH_STATE") throw error;
+          const code = error instanceof AppError ? error.code.toLowerCase() : `${provider.name}_failed`;
+          response.redirect(303, socialErrorReturnTo(transient.returnTo, code));
+        }
+      })
+    );
+  }
 
   router.post(
     "/register",

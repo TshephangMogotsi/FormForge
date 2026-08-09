@@ -6,7 +6,9 @@ export type UserDatabaseRecord = {
   name: string;
   email: string;
   emailVerifiedAt: Date | null;
-  passwordHash: string;
+  passwordHash: string | null;
+  googleSubject?: string | null;
+  facebookSubject?: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -35,8 +37,22 @@ const userSchema = new Schema<UserDatabaseRecord>(
     },
     passwordHash: {
       type: String,
-      required: true,
+      default: null,
       select: false
+    },
+    googleSubject: {
+      type: String,
+      maxlength: 255,
+      sparse: true,
+      unique: true,
+      index: true
+    },
+    facebookSubject: {
+      type: String,
+      maxlength: 255,
+      sparse: true,
+      unique: true,
+      index: true
     }
   },
   {
