@@ -5,6 +5,7 @@ import type { AuthService } from "../auth/auth.service.js";
 import {
   createFormSchema,
   formIdSchema,
+  guestDraftIdSchema,
   listFormsQuerySchema,
   listSubmissionsQuerySchema,
   updateFormSchema
@@ -41,6 +42,20 @@ export function createFormRouter(authService: AuthService, formService: FormServ
       const input = createFormSchema.parse(request.body);
       const form = await formService.create(request.auth!.userId, input);
       response.status(201).json({ data: { form } });
+    })
+  );
+
+  router.put(
+    "/claims/:guestDraftId",
+    asyncHandler(async (request, response) => {
+      const guestDraftId = guestDraftIdSchema.parse(request.params.guestDraftId);
+      const input = createFormSchema.parse(request.body);
+      const form = await formService.claimGuestDraft(
+        request.auth!.userId,
+        guestDraftId,
+        input
+      );
+      response.json({ data: { form } });
     })
   );
 

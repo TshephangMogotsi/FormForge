@@ -382,7 +382,14 @@ export default function App() {
     return (
       <Suspense fallback={<AppLoading />}>
         <GuestBuilderPage
-          onSignIn={() => navigate("/login?returnTo=%2Fbuild%2Fnew")}
+          user={user}
+          onClaimed={(authenticatedUser, form) => {
+            setUser(authenticatedUser);
+            setForms((current) => [form, ...current.filter((candidate) => candidate.id !== form.id)]);
+            setActiveForm(form);
+            setView("builder");
+            navigate(`/forms/${form.id}/edit`, true);
+          }}
         />
       </Suspense>
     );

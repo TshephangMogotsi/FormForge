@@ -87,6 +87,7 @@ export const updateFormSchema = z
   });
 
 export const formIdSchema = z.string().regex(/^[a-f\d]{24}$/i, "Enter a valid form identifier.");
+export const guestDraftIdSchema = z.uuid("Enter a valid guest draft identifier.");
 
 export const publicFormSlugSchema = z
   .string()

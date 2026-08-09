@@ -127,6 +127,7 @@ class CapturingPasswordResetNotifier implements PasswordResetNotifier {
 
 class InMemoryFormRepository implements FormRepository {
   private readonly forms = new Map<string, FormRecord>();
+  private readonly guestClaims = new Map<string, string>();
   private readonly publications = new Map<string, PublishedFormRecord[]>();
   private submissions: SubmissionRecord[] = [];
   private nextId = 100;
@@ -146,6 +147,18 @@ class InMemoryFormRepository implements FormRepository {
     };
     this.nextId += 1;
     this.forms.set(form.id, form);
+    return form;
+  }
+
+  async claimGuestDraft(
+    input: CreateFormRecord & { sourceGuestDraftId: string }
+  ): Promise<FormRecord> {
+    const claimKey = `${input.ownerId}:${input.sourceGuestDraftId}`;
+    const existingFormId = this.guestClaims.get(claimKey);
+    if (existingFormId) return this.forms.get(existingFormId)!;
+
+    const form = await this.create(input);
+    this.guestClaims.set(claimKey, form.id);
     return form;
   }
 
@@ -656,6 +669,9 @@ describe("FormForge API", () => {
     const duplication = await request(app).post(
       "/api/v1/forms/000000000000000000000001/duplicate"
     );
+    const claim = await request(app)
+      .put("/api/v1/forms/claims/b3b2c1d0-7a6f-4f52-91af-2f2a5cf56e21")
+      .send({ title: "Guest form" });
 
     expect(response.status).toBe(401);
     expect(response.body.error.code).toBe("UNAUTHENTICATED");
@@ -663,6 +679,90 @@ describe("FormForge API", () => {
     expect(analytics.body.error.code).toBe("UNAUTHENTICATED");
     expect(duplication.status).toBe(401);
     expect(duplication.body.error.code).toBe("UNAUTHENTICATED");
+    expect(claim.status).toBe(401);
+    expect(claim.body.error.code).toBe("UNAUTHENTICATED");
+  });
+
+  it("claims a validated guest draft exactly once per owner", async () => {
+    const owner = request.agent(app);
+    const otherOwner = request.agent(app);
+    await register(owner, "owner@example.com");
+    await register(otherOwner, "other@example.com", "Other Owner");
+    const guestDraftId = "b3b2c1d0-7a6f-4f52-91af-2f2a5cf56e21";
+    const draft = {
+      title: "Volunteer signup",
+      description: "A guest-created draft.",
+      fields: [
+        {
+          id: "70b39b40-5fe6-4181-bd80-83f2739010d3",
+          type: "shortText",
+          label: "What is your name?",
+          description: "",
+          placeholder: "Your name",
+          required: true,
+          options: []
+        }
+      ]
+    };
+
+    const firstClaim = await owner
+      .put(`/api/v1/forms/claims/${guestDraftId}`)
+      .send(draft);
+    const retriedClaim = await owner
+      .put(`/api/v1/forms/claims/${guestDraftId}`)
+      .send({ ...draft, title: "A retry must not overwrite the original" });
+    const otherOwnerClaim = await otherOwner
+      .put(`/api/v1/forms/claims/${guestDraftId}`)
+      .send(draft);
+
+    expect(firstClaim.status).toBe(200);
+    expect(firstClaim.body.data.form).toMatchObject({
+      title: "Volunteer signup",
+      description: "A guest-created draft.",
+      status: "draft",
+      fields: [expect.objectContaining({ id: draft.fields[0].id })]
+    });
+    expect(retriedClaim.status).toBe(200);
+    expect(retriedClaim.body.data.form.id).toBe(firstClaim.body.data.form.id);
+    expect(retriedClaim.body.data.form.title).toBe("Volunteer signup");
+    expect((await owner.get("/api/v1/forms")).body.data.pagination.total).toBe(1);
+
+    expect(otherOwnerClaim.status).toBe(200);
+    expect(otherOwnerClaim.body.data.form.id).not.toBe(firstClaim.body.data.form.id);
+    expect(otherOwnerClaim.body.data.form.ownerId).not.toBe(
+      firstClaim.body.data.form.ownerId
+    );
+  });
+
+  it("rejects malformed guest claim identifiers and draft fields", async () => {
+    const owner = request.agent(app);
+    await register(owner, "owner@example.com");
+
+    const invalidId = await owner
+      .put("/api/v1/forms/claims/not-a-uuid")
+      .send({ title: "Guest form" });
+    const invalidDraft = await owner
+      .put("/api/v1/forms/claims/b3b2c1d0-7a6f-4f52-91af-2f2a5cf56e21")
+      .send({
+        title: "Guest form",
+        fields: [
+          {
+            id: "not-a-uuid",
+            type: "shortText",
+            label: "Question",
+            description: "",
+            placeholder: "",
+            required: false,
+            options: []
+          }
+        ]
+      });
+
+    expect(invalidId.status).toBe(400);
+    expect(invalidId.body.error.code).toBe("VALIDATION_ERROR");
+    expect(invalidDraft.status).toBe(400);
+    expect(invalidDraft.body.error.code).toBe("VALIDATION_ERROR");
+    expect((await owner.get("/api/v1/forms")).body.data.pagination.total).toBe(0);
   });
 
   it("rejects pagination limits above the documented maximum", async () => {

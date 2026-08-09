@@ -85,6 +85,9 @@ export type OwnerAnalyticsCounts = {
 
 export interface FormRepository {
   create(input: CreateFormRecord): Promise<FormRecord>;
+  claimGuestDraft(
+    input: CreateFormRecord & { sourceGuestDraftId: string }
+  ): Promise<FormRecord>;
   listByOwner(ownerId: string, page: number, limit: number): Promise<FormPage>;
   findByOwnerAndId(ownerId: string, formId: string): Promise<FormRecord | null>;
   updateByOwnerAndId(
@@ -178,6 +181,42 @@ export class MongooseFormRepository implements FormRepository {
   async create(input: CreateFormRecord): Promise<FormRecord> {
     const form = await FormModel.create(input);
     return toFormRecord(form);
+  }
+
+  async claimGuestDraft(
+    input: CreateFormRecord & { sourceGuestDraftId: string }
+  ): Promise<FormRecord> {
+    const { ownerId, sourceGuestDraftId, title, description, fields } = input;
+    const filter = { ownerId, sourceGuestDraftId };
+
+    try {
+      const form = await FormModel.findOneAndUpdate(
+        filter,
+        {
+          $setOnInsert: {
+            ownerId,
+            sourceGuestDraftId,
+            title,
+            description,
+            fields
+          }
+        },
+        {
+          upsert: true,
+          new: true,
+          runValidators: true,
+          setDefaultsOnInsert: true
+        }
+      ).exec();
+
+      if (!form) throw new Error("Guest draft claim did not return a form.");
+      return toFormRecord(form);
+    } catch (error) {
+      if ((error as { code?: number }).code !== 11000) throw error;
+      const existing = await FormModel.findOne(filter).exec();
+      if (!existing) throw error;
+      return toFormRecord(existing);
+    }
   }
 
   async listByOwner(ownerId: string, page: number, limit: number): Promise<FormPage> {

@@ -66,8 +66,8 @@ type BuilderPageProps =
       initialDraft: FormDraft;
       onSaveDraft: (draft: FormDraft) => boolean;
       onStartOver: () => void;
-      onSignIn: () => void;
-      onRequireAccount: () => void;
+      accountActionLabel: "Sign in" | "Save to account";
+      onRequireAccount: (draft: FormDraft) => void;
     };
 
 const fieldCatalog: Array<{
@@ -566,7 +566,7 @@ export function BuilderPage(props: BuilderPageProps) {
 
   async function handlePublish() {
     if (props.mode === "guest") {
-      props.onRequireAccount();
+      props.onRequireAccount(draft);
       return;
     }
     if (publishing) return;
@@ -681,8 +681,12 @@ export function BuilderPage(props: BuilderPageProps) {
                 Save draft
               </button>
             ) : (
-              <button className="secondary-button guest-sign-in" type="button" onClick={props.onSignIn}>
-                <LogIn size={16} /> Sign in
+              <button
+                className="secondary-button guest-sign-in"
+                type="button"
+                onClick={() => props.onRequireAccount(draft)}
+              >
+                <LogIn size={16} /> {props.accountActionLabel}
               </button>
             )}
             <button

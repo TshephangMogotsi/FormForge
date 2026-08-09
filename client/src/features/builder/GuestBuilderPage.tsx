@@ -1,14 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { LoaderCircle } from "lucide-react";
+import { AuthForm } from "../auth/AuthForm";
+import { api, type FormSummary, type User } from "../../lib/api";
 import { BuilderPage } from "./BuilderPage";
 import type { FormDraft } from "./form-draft";
 import {
   createGuestDraft,
+  clearGuestDraft,
   loadGuestDraft,
   saveGuestDraft,
   type GuestDraft
 } from "./guest-draft-storage";
 
-type GuestDialog = "account" | "reset" | null;
+type GuestDialog = "auth" | "reset" | null;
+type ClaimState = "idle" | "pending" | "error";
 
 function initializeGuestDraft(): {
   guestDraft: GuestDraft;
@@ -32,9 +37,18 @@ function initializeGuestDraft(): {
   return { guestDraft, storageWarning: null };
 }
 
-export function GuestBuilderPage({ onSignIn }: { onSignIn: () => void }) {
+export function GuestBuilderPage({
+  user,
+  onClaimed
+}: {
+  user: User | null;
+  onClaimed: (user: User, form: FormSummary) => void;
+}) {
   const [state, setState] = useState(initializeGuestDraft);
   const [dialog, setDialog] = useState<GuestDialog>(null);
+  const [claimUser, setClaimUser] = useState<User | null>(null);
+  const [claimState, setClaimState] = useState<ClaimState>("idle");
+  const [claimError, setClaimError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const guestDraftRef = useRef(state.guestDraft);
 
@@ -75,7 +89,38 @@ export function GuestBuilderPage({ onSignIn }: { onSignIn: () => void }) {
     setDialog(null);
   }
 
-  const accountDialog = dialog === "account";
+  async function claimDraft(authenticatedUser: User) {
+    setClaimUser(authenticatedUser);
+    setClaimState("pending");
+    setClaimError(null);
+    try {
+      const guestDraft = guestDraftRef.current;
+      const form = await api.claimGuestDraft(guestDraft.id, guestDraft.draft);
+      clearGuestDraft();
+      onClaimed(authenticatedUser, form);
+    } catch (caughtError) {
+      setClaimState("error");
+      setClaimError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Your form could not be saved. Please try again."
+      );
+    }
+  }
+
+  function requireAccount(draft: FormDraft) {
+    saveLocalDraft(draft);
+    setDialog("auth");
+    setClaimError(null);
+    if (user) void claimDraft(user);
+    else {
+      setClaimUser(null);
+      setClaimState("idle");
+    }
+  }
+
+  const authDialog = dialog === "auth";
+  const claimPending = claimState === "pending";
 
   return (
     <main className="guest-builder-shell">
@@ -85,8 +130,8 @@ export function GuestBuilderPage({ onSignIn }: { onSignIn: () => void }) {
         initialDraft={state.guestDraft.draft}
         onSaveDraft={saveLocalDraft}
         onStartOver={() => setDialog("reset")}
-        onSignIn={onSignIn}
-        onRequireAccount={() => setDialog("account")}
+        accountActionLabel={user ? "Save to account" : "Sign in"}
+        onRequireAccount={requireAccount}
       />
 
       {state.storageWarning && (
@@ -98,50 +143,70 @@ export function GuestBuilderPage({ onSignIn }: { onSignIn: () => void }) {
       <dialog
         className="dashboard-dialog guest-builder-dialog"
         ref={dialogRef}
-        aria-labelledby="guest-dialog-title"
-        aria-describedby="guest-dialog-description"
+        aria-label={authDialog ? "Save this form to your account" : undefined}
+        aria-labelledby={authDialog ? undefined : "guest-dialog-title"}
         onCancel={(event) => {
           event.preventDefault();
-          setDialog(null);
+          if (!claimPending) setDialog(null);
         }}
         onClick={(event) => {
-          if (event.target === event.currentTarget) setDialog(null);
+          if (event.target === event.currentTarget && !claimPending) setDialog(null);
         }}
       >
-        <div className="dashboard-dialog-copy">
-          <span className="eyebrow">
-            {accountDialog ? "Your form is ready" : "Start a fresh draft"}
-          </span>
-          <h2 id="guest-dialog-title">
-            {accountDialog ? "Create an account to publish" : "Start over?"}
-          </h2>
-          <p id="guest-dialog-description">
-            {accountDialog
-              ? "Sign in or create a free account to get a share link and collect responses. Your draft is saved on this device."
-              : "This replaces the draft saved on this device. This action cannot be undone."}
-          </p>
-        </div>
-        <div className="dashboard-dialog-actions">
-          <button className="secondary-button" type="button" onClick={() => setDialog(null)}>
-            {accountDialog ? "Keep editing" : "Cancel"}
-          </button>
-          {accountDialog ? (
-            <button
-              className="primary-button"
-              type="button"
-              onClick={() => {
-                setDialog(null);
-                onSignIn();
-              }}
-            >
-              Continue to sign in
-            </button>
+        {authDialog ? (
+          claimUser ? (
+            <section className="guest-claim-status" aria-labelledby="guest-dialog-title">
+              <span className="eyebrow">Saving your progress</span>
+              <h2 id="guest-dialog-title">
+                {claimPending ? "Adding this form to your account…" : "We couldn’t save your form"}
+              </h2>
+              {claimPending ? (
+                <div className="guest-claim-loading" role="status">
+                  <LoaderCircle className="spin" size={20} />
+                  Your local draft is safe while we connect it to your account.
+                </div>
+              ) : (
+                <>
+                  <div className="auth-error" role="alert">
+                    {claimError ?? "Your form could not be saved. Please try again."}
+                  </div>
+                  <p>Your draft is still saved on this device. You do not need to sign in again.</p>
+                  <div className="dashboard-dialog-actions">
+                    <button className="secondary-button" type="button" onClick={() => setDialog(null)}>
+                      Keep editing
+                    </button>
+                    <button className="primary-button" type="button" onClick={() => void claimDraft(claimUser)}>
+                      Retry saving
+                    </button>
+                  </div>
+                </>
+              )}
+            </section>
           ) : (
+            <div className="guest-auth-frame">
+              <AuthForm context="guest" onAuthenticated={(authenticatedUser) => void claimDraft(authenticatedUser)} />
+              <button className="guest-auth-dismiss button-reset" type="button" onClick={() => setDialog(null)}>
+                Keep editing without an account
+              </button>
+            </div>
+          )
+        ) : (
+          <>
+            <div className="dashboard-dialog-copy">
+              <span className="eyebrow">Start a fresh draft</span>
+              <h2 id="guest-dialog-title">Start over?</h2>
+              <p>This replaces the draft saved on this device. This action cannot be undone.</p>
+            </div>
+            <div className="dashboard-dialog-actions">
+              <button className="secondary-button" type="button" onClick={() => setDialog(null)}>
+                Cancel
+              </button>
             <button className="danger-button" type="button" onClick={startOver}>
               Start over
             </button>
-          )}
-        </div>
+            </div>
+          </>
+        )}
       </dialog>
     </main>
   );

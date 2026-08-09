@@ -68,8 +68,8 @@
 - [x] Extract the shared draft contract and versioned browser storage.
 - [x] Add stable application routes and a public guest-builder entry point.
 - [x] Add local-only autosave, recovery, and start-over behavior.
-- [ ] Add contextual registration and login without leaving the builder.
-- [ ] Claim guest drafts idempotently through the authenticated API.
+- [x] Add contextual registration and login without leaving the builder.
+- [x] Claim guest drafts idempotently through the authenticated API.
 - [ ] Resume save or publish intent after authentication.
 - [ ] Add first-publication trust and abuse controls.
 - [ ] Add privacy-safe funnel measurement and launch verification.

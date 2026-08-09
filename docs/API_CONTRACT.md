@@ -55,6 +55,7 @@ All form endpoints require authentication.
 
 - `GET /api/v1/forms?page=1&limit=20`
 - `POST /api/v1/forms`
+- `PUT /api/v1/forms/claims/:guestDraftId`
 - `POST /api/v1/forms/:formId/duplicate`
 - `GET /api/v1/forms/:formId`
 - `PATCH /api/v1/forms/:formId`
@@ -66,6 +67,36 @@ All form endpoints require authentication.
 
 List limits are bounded to 50. Read, duplicate, update, and delete operations
 scope the database query by both `formId` and the authenticated `ownerId`.
+
+The claim endpoint accepts a complete validated draft and uses the UUID
+`guestDraftId` as an idempotency key scoped to the authenticated owner. Its first
+successful `PUT` creates an owner-scoped draft and returns `200`; retries return that
+same form without replacing its contents. A different owner can independently claim a
+draft with the same browser identifier. Unauthenticated claims return `401`.
+
+Example guest-draft claim:
+
+```http
+PUT /api/v1/forms/claims/4a73a448-4fcc-4a9e-9cb1-c7ff2c735baa
+```
+
+```json
+{
+  "title": "Community event signup",
+  "description": "Register your interest.",
+  "fields": [
+    {
+      "id": "b3b2c1d0-7a6f-4f52-91af-2f2a5cf56e21",
+      "type": "shortText",
+      "label": "Your name",
+      "description": "",
+      "placeholder": "Ada Builder",
+      "required": true,
+      "options": []
+    }
+  ]
+}
+```
 
 Example create request:
 

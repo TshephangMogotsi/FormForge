@@ -93,6 +93,20 @@ export class FormService {
     });
   }
 
+  claimGuestDraft(
+    ownerId: string,
+    sourceGuestDraftId: string,
+    input: CreateFormInput
+  ): Promise<FormRecord> {
+    return this.forms.claimGuestDraft({
+      ownerId,
+      sourceGuestDraftId,
+      title: input.title,
+      description: input.description,
+      fields: input.fields
+    });
+  }
+
   async get(ownerId: string, formId: string): Promise<FormRecord> {
     const form = await this.forms.findByOwnerAndId(ownerId, formId);
     if (!form) {

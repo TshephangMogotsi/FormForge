@@ -208,6 +208,20 @@ export const api = {
     return response.data.form;
   },
 
+  async claimGuestDraft(
+    guestDraftId: string,
+    draft: { title: string; description: string; fields: FormField[] }
+  ) {
+    const response = await apiRequest<{ data: { form: FormSummary } }>(
+      `/api/v1/forms/claims/${encodeURIComponent(guestDraftId)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(draft)
+      }
+    );
+    return response.data.form;
+  },
+
   async duplicateForm(formId: string) {
     const response = await apiRequest<{ data: { form: FormSummary } }>(
       `/api/v1/forms/${formId}/duplicate`,
