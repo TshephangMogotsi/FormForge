@@ -2,6 +2,11 @@ name: Deploy production
 
 on:
   workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Full 40-character SHA of a previously verified main release (defaults to the selected ref)
+        required: false
+        type: string
 
 concurrency:
   group: production
@@ -11,6 +16,8 @@ jobs:
   deploy:
     name: Deploy verified image to ECS Express
     runs-on: ubuntu-latest
+    env:
+      RELEASE_SHA: ${{ inputs.release_sha || github.sha }}
     permissions:
       contents: read
       id-token: write
@@ -19,6 +26,16 @@ jobs:
       url: ${{ steps.endpoint.outputs.url }}
 
     steps:
+      - name: Validate the immutable release identifier
+        run: |
+          case "$RELEASE_SHA" in
+            *[!0-9a-f]*|'') echo "release_sha must contain only lowercase hexadecimal characters"; exit 1 ;;
+          esac
+          if [ "${#RELEASE_SHA}" -ne 40 ]; then
+            echo "release_sha must be a full 40-character commit SHA"
+            exit 1
+          fi
+
       - name: Assume the AWS delivery role
         uses: aws-actions/configure-aws-credentials@v6
         with:
@@ -32,7 +49,7 @@ jobs:
       - name: Verify the selected release exists
         env:
           ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
-          IMAGE_TAG: sha-${{ github.sha }}
+          IMAGE_TAG: sha-${{ env.RELEASE_SHA }}
         run: |
           aws ecr describe-images \
             --repository-name "$ECR_REPOSITORY" \
@@ -44,7 +61,7 @@ jobs:
         with:
           service-name: formforge-production
           cluster: ${{ vars.ECS_CLUSTER }}
-          image: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:sha-${{ github.sha }}
+          image: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:sha-${{ env.RELEASE_SHA }}
           execution-role-arn: ${{ vars.ECS_TASK_EXECUTION_ROLE_ARN }}
           task-role-arn: ${{ vars.ECS_APPLICATION_TASK_ROLE_ARN }}
           infrastructure-role-arn: ${{ vars.ECS_EXPRESS_INFRASTRUCTURE_ROLE_ARN }}
@@ -64,7 +81,7 @@ jobs:
             ]
           cpu: "256"
           memory: "512"
-          health-check-path: /api/health
+          health-check-path: /api/health/ready
           min-task-count: "1"
           max-task-count: "2"
           auto-scaling-metric: AVERAGE_CPU
@@ -96,9 +113,9 @@ jobs:
             --retry 10 \
             --retry-delay 3 \
             --retry-all-errors \
-            "$ENDPOINT/api/health"
+            "$ENDPOINT/api/health/ready"
 
       - name: Publish the deployment endpoint
         env:
           ENDPOINT: ${{ steps.endpoint.outputs.url }}
-        run: echo "Production endpoint — $ENDPOINT" >> "$GITHUB_STEP_SUMMARY"
+        run: echo "Production endpoint — $ENDPOINT (sha-$RELEASE_SHA)" >> "$GITHUB_STEP_SUMMARY"

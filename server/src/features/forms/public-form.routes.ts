@@ -1,6 +1,9 @@
 import { Router } from "express";
-import rateLimit from "express-rate-limit";
 import { asyncHandler } from "../../lib/async-handler.js";
+import {
+  createRateLimiter,
+  rateLimitPolicies
+} from "../../middleware/rate-limit.js";
 import { createSubmissionSchema, publicFormSlugSchema } from "./form.schemas.js";
 import type { FormService } from "./form.service.js";
 
@@ -18,12 +21,7 @@ export function createPublicFormRouter(formService: FormService) {
 
   router.post(
     "/:slug/submissions",
-    rateLimit({
-      windowMs: 60_000,
-      limit: 20,
-      standardHeaders: "draft-8",
-      legacyHeaders: false
-    }),
+    createRateLimiter(rateLimitPolicies.publicSubmissions),
     asyncHandler(async (request, response) => {
       const slug = publicFormSlugSchema.parse(request.params.slug);
       const input = createSubmissionSchema.parse(request.body);

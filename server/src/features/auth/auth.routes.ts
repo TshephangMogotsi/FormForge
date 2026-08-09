@@ -1,9 +1,12 @@
 import type { CookieOptions } from "express";
 import { Router } from "express";
-import rateLimit from "express-rate-limit";
 import { env } from "../../config/env.js";
 import { AppError } from "../../lib/app-error.js";
 import { asyncHandler } from "../../lib/async-handler.js";
+import {
+  createRateLimiter,
+  rateLimitPolicies
+} from "../../middleware/rate-limit.js";
 import { authCookieName } from "./auth.constants.js";
 import {
   forgotPasswordSchema,
@@ -23,18 +26,8 @@ const authCookieOptions: CookieOptions = {
 
 export function createAuthRouter(authService: AuthService) {
   const router = Router();
-  const credentialLimiter = rateLimit({
-    windowMs: 15 * 60_000,
-    limit: 20,
-    standardHeaders: "draft-8",
-    legacyHeaders: false
-  });
-  const recoveryLimiter = rateLimit({
-    windowMs: 15 * 60_000,
-    limit: 5,
-    standardHeaders: "draft-8",
-    legacyHeaders: false
-  });
+  const credentialLimiter = createRateLimiter(rateLimitPolicies.credentials);
+  const recoveryLimiter = createRateLimiter(rateLimitPolicies.passwordRecovery);
 
   router.post(
     "/register",

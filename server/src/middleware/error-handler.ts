@@ -14,6 +14,22 @@ export const notFoundHandler: RequestHandler = (request, response) => {
 };
 
 export const errorHandler: ErrorRequestHandler = (error, request, response, _next) => {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    (("type" in error && error.type === "entity.too.large") ||
+      ("status" in error && error.status === 413))
+  ) {
+    response.status(413).json({
+      error: {
+        code: "PAYLOAD_TOO_LARGE",
+        message: "The request body exceeds the 100 KB limit.",
+        requestId: request.requestId
+      }
+    });
+    return;
+  }
+
   if (error instanceof AppError) {
     response.status(error.statusCode).json({
       error: {

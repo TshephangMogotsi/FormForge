@@ -36,6 +36,6 @@ USER node
 EXPOSE 4000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD wget -q -O - "http://127.0.0.1:${PORT:-4000}/api/health" > /dev/null || exit 1
+  CMD wget -q -O - "http://127.0.0.1:${PORT:-4000}/api/health/live" > /dev/null || exit 1
 
 CMD ["node", "server/dist/server.js"]
