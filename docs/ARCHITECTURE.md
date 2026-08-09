@@ -71,7 +71,13 @@ flowchart LR
    owner-scoped update endpoint and exposes pending, saving, saved, and failed states.
 4. When a guest requests an account capability, authentication completes first and an
    idempotent claim creates a new owner-scoped form from the complete guest draft.
-5. Zod validates stable UUIDs, field types, lengths, option constraints, and the
+5. The client replaces the guest route with the canonical owner edit URL and resumes
+   only the small pending capability intent. A publish failure leaves the claimed draft
+   intact and retryable; form content never enters the URL.
+6. If an owned save or publication receives `401`, the builder retains its in-memory
+   draft, requests same-owner reauthentication in place, and retries the interrupted
+   action after the session is restored.
+7. Zod validates stable UUIDs, field types, lengths, option constraints, and the
    maximum field count before MongoDB atomically replaces the embedded draft array.
 
 ### Submission

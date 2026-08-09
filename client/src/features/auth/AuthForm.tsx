@@ -7,7 +7,7 @@ type AuthMode = "login" | "register" | "forgot" | "reset";
 type AuthFormProps = {
   onAuthenticated: (user: User) => void;
   resetToken?: string | null;
-  context?: "page" | "guest";
+  context?: "page" | "guest" | "reauth";
 };
 
 const pageCopy: Record<AuthMode, { eyebrow: string; title: string; description: string }> = {
@@ -46,19 +46,29 @@ const guestCopy: Pick<typeof pageCopy, "register" | "login"> = {
   }
 };
 
+const reauthCopy = {
+  eyebrow: "Session expired",
+  title: "Sign in to keep saving",
+  description: "Your unsaved changes are still here. Sign back into the same account to continue."
+};
+
 export function AuthForm({
   onAuthenticated,
   resetToken = null,
   context = "page"
 }: AuthFormProps) {
   const titleId = useId();
-  const [mode, setMode] = useState<AuthMode>(resetToken ? "reset" : "register");
+  const [mode, setMode] = useState<AuthMode>(
+    resetToken ? "reset" : context === "reauth" ? "login" : "register"
+  );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const copy = context === "guest" && (mode === "register" || mode === "login")
-    ? guestCopy[mode]
-    : pageCopy[mode];
+  const copy = context === "reauth" && mode === "login"
+    ? reauthCopy
+    : context === "guest" && (mode === "register" || mode === "login")
+      ? guestCopy[mode]
+      : pageCopy[mode];
 
   function changeMode(nextMode: AuthMode) {
     setMode(nextMode);
@@ -199,7 +209,7 @@ export function AuthForm({
             Back to sign in
           </button>
         )}
-        {(mode === "login" || mode === "register") && (
+        {(mode === "login" || mode === "register") && context !== "reauth" && (
           <button
             className="auth-switch button-reset"
             type="button"

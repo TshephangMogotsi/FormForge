@@ -70,7 +70,7 @@
 - [x] Add local-only autosave, recovery, and start-over behavior.
 - [x] Add contextual registration and login without leaving the builder.
 - [x] Claim guest drafts idempotently through the authenticated API.
-- [ ] Resume save or publish intent after authentication.
+- [x] Resume save or publish intent after authentication.
 - [ ] Add first-publication trust and abuse controls.
 - [ ] Add privacy-safe funnel measurement and launch verification.
 

@@ -258,8 +258,11 @@ analytics, integrations, uploads, and metered providers remain authenticated.
 After authentication, the client sends the complete guest draft with a stable
 idempotency identifier to the existing modular API boundary. The server validates it,
 assigns ownership, and returns the canonical form before the client removes local data
-or resumes publication. Authentication tokens remain in HTTP-only cookies and never
-enter browser draft storage.
+or resumes publication. Only the `save` or `publish` intent is retained in React state;
+form content is never placed in a URL. After claim, the canonical owner edit URL replaces
+the guest route. An expired owned session is recovered in place and only resumes after
+the same owner authenticates. Authentication tokens remain in HTTP-only cookies and
+never enter browser draft storage.
 
 Server-side anonymous accounts were rejected for the first public trial because they
 would create bot-accessible writes, abandoned database records, retention work, and

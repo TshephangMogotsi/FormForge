@@ -45,13 +45,17 @@ import {
 } from "lucide-react";
 import {
   api,
+  ApiError,
   type FormField,
   type FormFieldType,
-  type FormSummary
+  type FormSummary,
+  type User
 } from "../../lib/api";
+import { AuthForm } from "../auth/AuthForm";
 import type { FormDraft } from "./form-draft";
 
 type SaveState = "saved" | "unsaved" | "saving" | "error";
+export type BuilderIntent = "save" | "publish";
 
 type BuilderPageProps =
   | {
@@ -60,6 +64,10 @@ type BuilderPageProps =
       onBack: () => void;
       onOpenResponses: () => void;
       onSaved: (form: FormSummary) => void;
+      initialIntent?: "publish";
+      onInitialIntentHandled?: () => void;
+      expectedUserId: string;
+      onReauthenticated: (user: User) => void;
     }
   | {
       mode: "guest";
@@ -67,7 +75,7 @@ type BuilderPageProps =
       onSaveDraft: (draft: FormDraft) => boolean;
       onStartOver: () => void;
       accountActionLabel: "Sign in" | "Save to account";
-      onRequireAccount: (draft: FormDraft) => void;
+      onRequireAccount: (draft: FormDraft, intent: BuilderIntent) => void;
     };
 
 const fieldCatalog: Array<{
@@ -396,12 +404,16 @@ export function BuilderPage(props: BuilderPageProps) {
   const [loaded, setLoaded] = useState(guestMode);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [retryAction, setRetryAction] = useState<BuilderIntent | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [previewing, setPreviewing] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishedVersion, setPublishedVersion] = useState(0);
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [reauthIntent, setReauthIntent] = useState<BuilderIntent | null>(null);
+  const reauthDialogRef = useRef<HTMLDialogElement>(null);
+  const initialIntentAttempted = useRef(false);
   const lastSavedSnapshot = useRef(
     guestMode ? JSON.stringify(initialDraftRef.current) : ""
   );
@@ -411,6 +423,13 @@ export function BuilderPage(props: BuilderPageProps) {
     props.mode === "owned" ? props.onSaved : undefined
   );
   onSavedRef.current = props.mode === "owned" ? props.onSaved : undefined;
+
+  useEffect(() => {
+    const element = reauthDialogRef.current;
+    if (!element) return;
+    if (reauthIntent && !element.open) element.showModal();
+    if (!reauthIntent && element.open) element.close();
+  }, [reauthIntent]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -461,12 +480,13 @@ export function BuilderPage(props: BuilderPageProps) {
   }, [ownedFormId]);
 
   const saveDraft = useCallback(
-    async (snapshot = currentSnapshot.current) => {
+    async (snapshot = currentSnapshot.current, resumeIntent: BuilderIntent = "save") => {
       const payload = JSON.parse(snapshot) as FormDraft;
       if (guestSave) {
         const sequence = ++saveSequence.current;
         setSaveState("saving");
         setSaveError(null);
+        setRetryAction(null);
         const saved = guestSave(payload);
         if (sequence === saveSequence.current) {
           if (saved) {
@@ -489,6 +509,7 @@ export function BuilderPage(props: BuilderPageProps) {
       const sequence = ++saveSequence.current;
       setSaveState("saving");
       setSaveError(null);
+      setRetryAction(null);
       try {
         const form = await api.updateForm(ownedFormId!, payload);
         lastSavedSnapshot.current = snapshot;
@@ -498,9 +519,15 @@ export function BuilderPage(props: BuilderPageProps) {
         }
         return true;
       } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          setSaveState("unsaved");
+          setReauthIntent(resumeIntent);
+          return false;
+        }
         if (sequence === saveSequence.current) {
           setSaveState("error");
           setSaveError(error instanceof Error ? error.message : "Changes could not be saved.");
+          setRetryAction(resumeIntent);
         }
         return false;
       }
@@ -566,17 +593,18 @@ export function BuilderPage(props: BuilderPageProps) {
 
   async function handlePublish() {
     if (props.mode === "guest") {
-      props.onRequireAccount(draft);
+      props.onRequireAccount(draft, "publish");
       return;
     }
     if (publishing) return;
     if (currentSnapshot.current !== lastSavedSnapshot.current) {
-      const saved = await saveDraft();
+      const saved = await saveDraft(currentSnapshot.current, "publish");
       if (!saved) return;
     }
 
     setPublishing(true);
     setSaveError(null);
+    setRetryAction(null);
     try {
       const result = await api.publishForm(props.formId);
       onSavedRef.current?.(result.form);
@@ -584,10 +612,33 @@ export function BuilderPage(props: BuilderPageProps) {
       setPublishedUrl(`${window.location.origin}/f/${result.publication.slug}`);
       setLinkCopied(false);
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "The form could not be published.");
+      if (error instanceof ApiError && error.status === 401) {
+        setReauthIntent("publish");
+      } else {
+        setSaveError(error instanceof Error ? error.message : "The form could not be published.");
+        setRetryAction("publish");
+      }
     } finally {
       setPublishing(false);
     }
+  }
+
+  async function retryFailedAction() {
+    if (retryAction === "publish") await handlePublish();
+    else await saveDraft();
+  }
+
+  function handleReauthenticated(user: User) {
+    if (props.mode !== "owned") return;
+    if (user.id !== props.expectedUserId) {
+      throw new Error("Sign in with the account that owns this form.");
+    }
+
+    const intent = reauthIntent;
+    props.onReauthenticated(user);
+    setReauthIntent(null);
+    if (intent === "publish") void handlePublish();
+    else void saveDraft();
   }
 
   async function copyPublishedUrl() {
@@ -597,8 +648,24 @@ export function BuilderPage(props: BuilderPageProps) {
       setLinkCopied(true);
     } catch {
       setSaveError("Copying failed. Open the form and copy its address from the browser.");
+      setRetryAction(null);
     }
   }
+
+  useEffect(() => {
+    if (
+      props.mode !== "owned" ||
+      props.initialIntent !== "publish" ||
+      !loaded ||
+      initialIntentAttempted.current
+    ) {
+      return;
+    }
+
+    initialIntentAttempted.current = true;
+    props.onInitialIntentHandled?.();
+    void handlePublish();
+  }, [loaded, props]);
 
   if (loadError) {
     return (
@@ -684,7 +751,7 @@ export function BuilderPage(props: BuilderPageProps) {
               <button
                 className="secondary-button guest-sign-in"
                 type="button"
-                onClick={() => props.onRequireAccount(draft)}
+                onClick={() => props.onRequireAccount(draft, "save")}
               >
                 <LogIn size={16} /> {props.accountActionLabel}
               </button>
@@ -702,11 +769,13 @@ export function BuilderPage(props: BuilderPageProps) {
           </div>
         </header>
 
-        {saveError && (
-          <button className="builder-save-error" type="button" onClick={() => void saveDraft()}>
+        {saveError && retryAction ? (
+          <button className="builder-save-error" type="button" onClick={() => void retryFailedAction()}>
             {saveError} Select to retry.
           </button>
-        )}
+        ) : saveError ? (
+          <div className="builder-save-error" role="alert">{saveError}</div>
+        ) : null}
 
         {publishedUrl && !saveError && (
           <div className="builder-publish-notice" role="status">
@@ -850,6 +919,28 @@ export function BuilderPage(props: BuilderPageProps) {
           </div>
         )}
       </div>
+      {props.mode === "owned" && (
+        <dialog
+          className="dashboard-dialog guest-builder-dialog"
+          ref={reauthDialogRef}
+          aria-label="Restore your session"
+          onCancel={(event) => {
+            event.preventDefault();
+            setReauthIntent(null);
+          }}
+        >
+          <div className="guest-auth-frame">
+            <AuthForm context="reauth" onAuthenticated={handleReauthenticated} />
+            <button
+              className="guest-auth-dismiss button-reset"
+              type="button"
+              onClick={() => setReauthIntent(null)}
+            >
+              Keep editing for now
+            </button>
+          </div>
+        </dialog>
+      )}
       <DragOverlay>
         {activeLabel ? (
           <div className="drag-overlay">

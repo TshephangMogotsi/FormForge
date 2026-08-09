@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { LoaderCircle } from "lucide-react";
 import { AuthForm } from "../auth/AuthForm";
 import { api, type FormSummary, type User } from "../../lib/api";
-import { BuilderPage } from "./BuilderPage";
+import { BuilderPage, type BuilderIntent } from "./BuilderPage";
 import type { FormDraft } from "./form-draft";
 import {
   createGuestDraft,
@@ -42,7 +42,7 @@ export function GuestBuilderPage({
   onClaimed
 }: {
   user: User | null;
-  onClaimed: (user: User, form: FormSummary) => void;
+  onClaimed: (user: User, form: FormSummary, intent: BuilderIntent) => void;
 }) {
   const [state, setState] = useState(initializeGuestDraft);
   const [dialog, setDialog] = useState<GuestDialog>(null);
@@ -51,6 +51,7 @@ export function GuestBuilderPage({
   const [claimError, setClaimError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const guestDraftRef = useRef(state.guestDraft);
+  const pendingIntentRef = useRef<BuilderIntent>("save");
 
   useEffect(() => {
     const element = dialogRef.current;
@@ -97,7 +98,7 @@ export function GuestBuilderPage({
       const guestDraft = guestDraftRef.current;
       const form = await api.claimGuestDraft(guestDraft.id, guestDraft.draft);
       clearGuestDraft();
-      onClaimed(authenticatedUser, form);
+      onClaimed(authenticatedUser, form, pendingIntentRef.current);
     } catch (caughtError) {
       setClaimState("error");
       setClaimError(
@@ -108,8 +109,9 @@ export function GuestBuilderPage({
     }
   }
 
-  function requireAccount(draft: FormDraft) {
+  function requireAccount(draft: FormDraft, intent: BuilderIntent) {
     saveLocalDraft(draft);
+    pendingIntentRef.current = intent;
     setDialog("auth");
     setClaimError(null);
     if (user) void claimDraft(user);

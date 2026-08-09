@@ -9,6 +9,7 @@ import {
   Settings
 } from "lucide-react";
 import { AuthPage } from "./features/auth/AuthPage";
+import type { BuilderIntent } from "./features/builder/BuilderPage";
 import {
   DashboardPage,
   type PendingFormAction
@@ -167,6 +168,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [activeForm, setActiveForm] = useState<FormSummary | null>(null);
+  const [pendingBuilderIntent, setPendingBuilderIntent] = useState<BuilderIntent | null>(null);
   const [analyticsForm, setAnalyticsForm] = useState<FormSummary | null>(null);
 
   function navigate(path: string, replace = false) {
@@ -383,10 +385,11 @@ export default function App() {
       <Suspense fallback={<AppLoading />}>
         <GuestBuilderPage
           user={user}
-          onClaimed={(authenticatedUser, form) => {
+          onClaimed={(authenticatedUser, form, intent) => {
             setUser(authenticatedUser);
             setForms((current) => [form, ...current.filter((candidate) => candidate.id !== form.id)]);
             setActiveForm(form);
+            setPendingBuilderIntent(intent === "publish" ? "publish" : null);
             setView("builder");
             navigate(`/forms/${form.id}/edit`, true);
           }}
@@ -453,6 +456,10 @@ export default function App() {
           <BuilderPage
             mode="owned"
             formId={activeForm.id}
+            initialIntent={pendingBuilderIntent === "publish" ? "publish" : undefined}
+            onInitialIntentHandled={() => setPendingBuilderIntent(null)}
+            expectedUserId={user.id}
+            onReauthenticated={setUser}
             onBack={() => {
               setView("dashboard");
               navigate("/dashboard");
