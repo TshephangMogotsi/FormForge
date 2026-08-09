@@ -2,8 +2,8 @@
 
 ## Status on 2026-08-09
 
-Facebook Login is implemented and verified locally, but intentionally disabled in
-production. Meta requires a verified business portfolio and App Review before people
+Facebook Login is implemented and verified locally, but intentionally disabled by the
+`FACEBOOK_OAUTH_ENABLED=false` default in every environment. Meta requires a verified business portfolio and App Review before people
 outside the app's roles can authenticate. The owner does not currently have a registered
 business, so exposing the production button would send public users into a provider error.
 
@@ -50,7 +50,8 @@ Google sign-in is the only social provider enabled for the initial public rollou
 6. Confirm the production callback remains in Valid OAuth Redirect URIs:
    `https://formforge.valiantmedia.co.bw/api/v1/auth/facebook/callback`.
 7. Re-enable the two Facebook SSM entries in
-   `.github/workflows/deploy-production.yml`, deploy a new immutable release, and verify
+   `.github/workflows/deploy-production.yml`, set `FACEBOOK_OAUTH_ENABLED=true` in the
+   reviewed deployment configuration, deploy a new immutable release, and verify
    sign-in with both an app-role account and an unrelated Facebook account.
 
 ## Verification before enabling

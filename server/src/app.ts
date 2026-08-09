@@ -72,7 +72,7 @@ function createDefaultServices(): AppServices {
       )
     );
   }
-  if (env.FACEBOOK_APP_ID && env.FACEBOOK_APP_SECRET) {
+  if (env.FACEBOOK_OAUTH_ENABLED && env.FACEBOOK_APP_ID && env.FACEBOOK_APP_SECRET) {
     socialOAuthProviders.push(
       new FacebookOAuthProvider(
         env.FACEBOOK_APP_ID,

@@ -34,6 +34,12 @@ const envSchema = z
     GOOGLE_OAUTH_CLIENT_SECRET: z.string().trim().min(1).optional(),
     FACEBOOK_APP_ID: z.string().trim().min(1).optional(),
     FACEBOOK_APP_SECRET: z.string().trim().min(1).optional(),
+    FACEBOOK_OAUTH_ENABLED: z
+      .string()
+      .toLowerCase()
+      .pipe(z.enum(["true", "false"]))
+      .transform((value) => value === "true")
+      .default(false),
     FACEBOOK_GRAPH_API_VERSION: z.string().regex(/^v\d+\.\d+$/).default("v25.0"),
     TRIAL_MAX_FORMS_PER_ACCOUNT: z.coerce.number().int().min(1).max(100).default(25),
     TRIAL_MAX_PUBLISHED_FORMS_PER_ACCOUNT: z.coerce.number().int().min(1).max(100).default(5)
@@ -65,6 +71,13 @@ const envSchema = z
         code: "custom",
         path: ["FACEBOOK_APP_ID"],
         message: "Facebook OAuth requires both app ID and app secret."
+      });
+    }
+    if (values.FACEBOOK_OAUTH_ENABLED && (!values.FACEBOOK_APP_ID || !values.FACEBOOK_APP_SECRET)) {
+      context.addIssue({
+        code: "custom",
+        path: ["FACEBOOK_OAUTH_ENABLED"],
+        message: "Enabled Facebook OAuth requires an app ID and app secret."
       });
     }
   });
