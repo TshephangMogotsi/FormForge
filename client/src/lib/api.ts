@@ -105,14 +105,23 @@ export class ApiError extends Error {
 }
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    ...init,
-    credentials: "include",
-    headers: {
-      ...(init?.body ? { "content-type": "application/json" } : {}),
-      ...init?.headers
-    }
-  });
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      ...init,
+      credentials: "include",
+      headers: {
+        ...(init?.body ? { "content-type": "application/json" } : {}),
+        ...init?.headers
+      }
+    });
+  } catch {
+    throw new ApiError(
+      "Check your connection and try again.",
+      0,
+      "NETWORK_ERROR"
+    );
+  }
 
   if (response.status === 204) {
     return undefined as T;
