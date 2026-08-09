@@ -39,15 +39,15 @@ session tokens remain necessary but do not replace a private database network.
 Complete these checks without copying the connection string into logs or shared
 terminals:
 
-- [ ] Confirm the production cluster tier in Atlas.
-- [ ] Confirm the production database user is restricted to the FormForge database.
-- [ ] Confirm no runtime Atlas user has project-owner or administrative roles.
-- [ ] Review the Atlas network access list and record whether broad public access is
+- [x] Confirm the production cluster tier in Atlas.
+- [x] Confirm the production database user is restricted to the FormForge database.
+- [x] Confirm no runtime Atlas user has project-owner or administrative roles.
+- [x] Review the Atlas network access list and record whether broad public access is
   currently required.
 - [x] Confirm the production URI exists as an SSM `SecureString` and ECS injects it as
   a secret rather than a plain environment value.
-- [ ] Confirm `/api/health/ready` succeeds and the core form workflow remains intact.
-- [ ] Confirm preview uses a distinct credential before enabling preview deployments.
+- [x] Confirm `/api/health/ready` succeeds and the core form workflow remains intact.
+- [x] Confirm preview uses a distinct credential before enabling preview deployments.
 
 The AWS checks inspect only resource configuration and SSM metadata. They must never
 retrieve the parameter with decryption during routine verification.
@@ -61,9 +61,28 @@ explicit security group with public outbound access. Its task definition injects
 `SecureString`, and there is no plain `MONGODB_URI` environment entry. No secret value
 was retrieved.
 
-The deployed revision still points its load-balancer check at the compatibility
-`/api/health` route. The next application deployment will move that check to
-`/api/health/ready` through the updated workflow.
+Release `4f8965c607d0107d6a81fb8e6c3d5c52886b04a4` moved the deployed load-balancer
+check to `/api/health/ready`. External checks returned a ready database dependency
+and the branded application root returned HTTP 200.
+
+### 2026-08-09 Atlas and application verification
+
+Read-only Atlas CLI inspection confirmed that production uses an active M0 cluster.
+Its sole runtime database user has only `readWrite` on the `formforge` database and
+is scoped to `Cluster0`; it has no Atlas administrative database role. The production
+IP access list includes `0.0.0.0/0`, which remains necessary for the current dynamic
+public ECS egress and is the explicitly accepted no-cost MVP risk described above.
+
+Preview uses its own M0 cluster, project, and database user. That user has
+`readWriteAnyDatabase` only inside the isolated preview project because each pull
+request selects a different logical database. It cannot access the production project
+or cluster. Its IP access list also contains the documented broad entry required by
+ephemeral ECS preview tasks.
+
+Post-deployment verification exercised registration, form creation, publication,
+public snapshot retrieval, submission, owner response retrieval, analytics, form
+deletion, and logout against the branded production origin. All operations returned
+their expected success statuses; the synthetic form was removed after verification.
 
 ## Upgrade triggers
 
