@@ -401,14 +401,53 @@ describe("FormForge API", () => {
     ({ app, notifier } = createTestApp());
   });
 
-  it("reports service health and assigns a request ID", async () => {
-    const response = await request(app).get("/api/health");
+  it("reports process liveness and assigns a request ID", async () => {
+    const response = await request(app).get("/api/health/live");
 
     expect(response.status).toBe(200);
     expect(response.headers["x-request-id"]).toEqual(expect.any(String));
     expect(response.body).toMatchObject({
       status: "ok",
       service: "formforge-api"
+    });
+  });
+
+  it("reports database readiness separately from process liveness", async () => {
+    const readyApp = createTestApp({
+      databaseReadinessCheck: async () => true
+    }).app;
+    const unavailableApp = createTestApp({
+      databaseReadinessCheck: async () => false
+    }).app;
+
+    const ready = await request(readyApp).get("/api/health/ready");
+    const unavailable = await request(unavailableApp).get("/api/health/ready");
+    const liveDuringOutage = await request(unavailableApp).get("/api/health/live");
+
+    expect(ready.status).toBe(200);
+    expect(ready.body).toMatchObject({
+      status: "ready",
+      dependencies: { database: "ready" }
+    });
+    expect(unavailable.status).toBe(503);
+    expect(unavailable.body).toMatchObject({
+      status: "not-ready",
+      dependencies: { database: "not-ready" }
+    });
+    expect(liveDuringOutage.status).toBe(200);
+    expect(liveDuringOutage.body.status).toBe("ok");
+  });
+
+  it("returns a safe error when a JSON body exceeds the request limit", async () => {
+    const response = await request(app)
+      .post("/api/v1/forms")
+      .send({ title: "x".repeat(110_000) });
+
+    expect(response.status).toBe(413);
+    expect(response.body.error).toMatchObject({
+      code: "PAYLOAD_TOO_LARGE",
+      message: "The request body exceeds the 100 KB limit.",
+      requestId: expect.any(String)
     });
   });
 
@@ -624,6 +663,44 @@ describe("FormForge API", () => {
     expect(analytics.body.error.code).toBe("UNAUTHENTICATED");
     expect(duplication.status).toBe(401);
     expect(duplication.body.error.code).toBe("UNAUTHENTICATED");
+  });
+
+  it("rejects pagination limits above the documented maximum", async () => {
+    const owner = request.agent(app);
+    await register(owner, "owner@example.com");
+
+    const response = await owner.get("/api/v1/forms?limit=51");
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toMatchObject({
+      code: "VALIDATION_ERROR",
+      requestId: expect.any(String)
+    });
+    expect(response.body.error.details).toContainEqual({
+      path: "limit",
+      message: "Too big: expected number to be <=50"
+    });
+  });
+
+  it("rate-limits repeated public submission attempts with the shared error shape", async () => {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const response = await request(app)
+        .post("/api/v1/public/forms/missing-form/submissions")
+        .send({ answers: [] });
+      expect(response.status).toBe(404);
+    }
+
+    const limited = await request(app)
+      .post("/api/v1/public/forms/missing-form/submissions")
+      .send({ answers: [] });
+
+    expect(limited.status).toBe(429);
+    expect(limited.headers["retry-after"]).toEqual(expect.any(String));
+    expect(limited.body.error).toMatchObject({
+      code: "RATE_LIMITED",
+      message: "Too many requests. Try again later.",
+      requestId: expect.any(String)
+    });
   });
 
   it("creates, lists, updates, and deletes forms for their owner", async () => {

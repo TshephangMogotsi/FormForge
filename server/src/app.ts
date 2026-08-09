@@ -1,7 +1,6 @@
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
-import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,8 +21,12 @@ import { createFormRouter } from "./features/forms/form.routes.js";
 import { FormService } from "./features/forms/form.service.js";
 import { createPublicFormRouter } from "./features/forms/public-form.routes.js";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
+import { createRateLimiter, rateLimitPolicies } from "./middleware/rate-limit.js";
 import { requestContext } from "./middleware/request-context.js";
-import { healthRouter } from "./routes/health.route.js";
+import {
+  createHealthRouter,
+  type DatabaseReadinessCheck
+} from "./routes/health.route.js";
 
 export type AppServices = {
   auth: AuthService;
@@ -32,6 +35,7 @@ export type AppServices = {
 
 export type AppOptions = {
   corsOrigin?: string | false;
+  databaseReadinessCheck?: DatabaseReadinessCheck;
 };
 
 const clientDistPath = fileURLToPath(new URL("../../client/dist", import.meta.url));
@@ -79,20 +83,15 @@ export function createApp(
       })
     );
   }
+  app.use(requestContext);
   app.use(express.json({ limit: "100kb" }));
   app.use(cookieParser());
-  app.use(requestContext);
-  app.use(
-    "/api",
-    rateLimit({
-      windowMs: 60_000,
-      limit: 180,
-      standardHeaders: "draft-8",
-      legacyHeaders: false
-    })
-  );
 
-  app.use("/api/health", healthRouter);
+  app.use(
+    "/api/health",
+    createHealthRouter(options.databaseReadinessCheck)
+  );
+  app.use("/api", createRateLimiter(rateLimitPolicies.api));
   app.use("/api/v1/auth", createAuthRouter(services.auth));
   app.use("/api/v1/forms", createFormRouter(services.auth, services.forms));
   app.use("/api/v1/public/forms", createPublicFormRouter(services.forms));

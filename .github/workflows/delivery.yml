@@ -197,7 +197,7 @@ jobs:
             ]
           cpu: "256"
           memory: "512"
-          health-check-path: /api/health
+          health-check-path: /api/health/ready
           min-task-count: "1"
           max-task-count: "1"
           tags: |
@@ -228,7 +228,7 @@ jobs:
             --retry 10 \
             --retry-delay 3 \
             --retry-all-errors \
-            "$ENDPOINT/api/health"
+            "$ENDPOINT/api/health/ready"
 
       - name: Publish the preview endpoint
         env:

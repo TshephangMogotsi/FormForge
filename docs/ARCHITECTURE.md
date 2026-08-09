@@ -37,6 +37,8 @@ flowchart LR
 - Coordinates domain services and persistence.
 - Applies rate limits, safe errors, structured logs, and correlation IDs.
 - Validates public submissions against the published form snapshot.
+- Exposes process liveness separately from MongoDB-backed readiness. Readiness
+  performs a bounded database ping and returns `503` while MongoDB is unavailable.
 
 ### MongoDB
 
@@ -118,7 +120,7 @@ flowchart TB
     DNS["Cloudflare DNS and TLS"] --> Edge["Scoped hostname Worker"]
     Edge --> LB["ECS Express gateway and load balancer"]
     LB --> Service["Containerized Node.js service"]
-    Service --> Atlas["MongoDB Atlas"]
+    Service --> Atlas["MongoDB Atlas public TLS endpoint"]
     Service --> Email["Amazon SES"]
     Service --> Logs["CloudWatch logs and alarms"]
     CI["GitHub Actions with AWS OIDC"] --> Registry["Private ECR repository"]
@@ -147,6 +149,13 @@ application boundary.
 Password-reset delivery is behind a notifier interface. The production adapter
 uses the ECS application task role to call Amazon SES from one verified sender;
 the domain service remains independent of AWS.
+
+The no-cost MVP uses Atlas's public TLS endpoint because Free and Flex clusters do not
+support PrivateLink and ECS Express tasks do not have stable public addresses. A broad
+Atlas network access entry, when required, is an explicitly documented residual risk
+with least-privilege credentials in SSM as a compensating control. PrivateLink remains
+the upgrade path for paid production; `docs/ATLAS_NETWORKING.md` records the boundary,
+verification checklist, and upgrade triggers.
 
 ECS Express Mode is the preferred first AWS runtime because it provides a real
 Fargate and Application Load Balancer deployment while reducing undifferentiated

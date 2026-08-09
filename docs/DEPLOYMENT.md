@@ -12,7 +12,8 @@ The container:
 - runs as an unprivileged user;
 - contains production dependencies only;
 - exposes the Express service on `PORT`;
-- reports database connectivity through `/api/health`;
+- reports process liveness through `/api/health/live` and database readiness through
+  `/api/health/ready`;
 - includes a Docker health check.
 
 ## Continuous delivery
@@ -96,6 +97,10 @@ Express Mode, waits for service stability, and smoke-tests the public health
 endpoint. This explicit gate prevents every application commit from
 automatically creating or changing continuously billed infrastructure.
 
+The workflow accepts an optional full `release_sha`. It deploys only an immutable ECR
+tag that already exists, making rollback to a preceding verified release an explicit,
+repeatable operation. ECS and deployment smoke checks use `/api/health/ready`.
+
 ## Custom domain edge
 
 `formforge.valiantmedia.co.bw` is a proxied Cloudflare DNS record. A narrowly
@@ -120,7 +125,7 @@ repository's `.env` file.
 | `PORT` | Port assigned by the hosting platform |
 | `CLIENT_ORIGIN` | Allowed Vite origin during local development; production CORS is disabled |
 | `PUBLIC_APP_ORIGIN` | Trusted origin used to build password-reset links |
-| `MONGODB_URI` | Atlas connection string for the production database user |
+| `MONGODB_URI` | Atlas TLS connection string for the least-privilege production database user |
 | `MONGODB_DATABASE` | Optional logical database override used for PR isolation |
 | `SESSION_TTL_HOURS` | Server-side and cookie session lifetime |
 | `PASSWORD_RESET_TTL_MINUTES` | Single-use reset-link lifetime |
@@ -158,12 +163,13 @@ Before exposing the service:
 
 - configure TLS and the final `PUBLIC_APP_ORIGIN`;
 - create a least-privilege Atlas user for the `formforge` database;
-- allow only the API infrastructure's stable outbound address in Atlas;
+- review and record the accepted no-cost Atlas boundary in
+  `docs/ATLAS_NETWORKING.md`;
 - confirm the ECS and load-balancer credit consumption before creating them;
 - verify registration, login, logout, form creation, and session restoration;
 - verify password-reset delivery, token expiry, one-time consumption, and
   session revocation;
-- verify `/api/health` from outside the hosting network;
+- verify `/api/health/live` and `/api/health/ready` from outside the hosting network;
 - protect `main` so verification must pass before merge;
 - retain the preceding container SHA for rollback.
 

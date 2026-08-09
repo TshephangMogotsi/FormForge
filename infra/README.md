@@ -88,7 +88,7 @@ log.
 ## Stage 2: runtime
 
 The manually triggered `Deploy production` GitHub workflow uses ECS Express Mode
-with the verified commit-SHA image, `/api/health` as its load-balancer health
+with the verified commit-SHA image, `/api/health/ready` as its load-balancer health
 check, and the smallest practical task size. Creating the service also
 provisions Fargate and an Application Load Balancer, which consume AWS credits
 while they exist.
@@ -100,12 +100,10 @@ the deployment record. Closing the PR deletes the Express service and its
 managed load-balancing resources. Configure the `preview` environment to require
 review before deployment if previews should incur cost only after approval.
 
-The runtime remains gated on:
-
-1. confirming the expected AWS cost;
-2. choosing a MongoDB Atlas network-access strategy;
-3. creating the SSM secret privately;
-4. reviewing the final deployment workflow.
+The no-cost MVP uses Atlas's public TLS endpoint with the compensating controls and
+explicit residual risk documented in `docs/ATLAS_NETWORKING.md`. AWS PrivateLink,
+dedicated Atlas pricing, and explicit endpoint subnet wiring are deferred until a paid
+production trigger justifies them.
 
 ## Teardown
 
