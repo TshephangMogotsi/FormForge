@@ -213,6 +213,8 @@ test("creates an account, claims the local draft, and resumes publishing", async
 
   await page.getByRole("button", { name: "Publish" }).click();
   const dialog = page.getByRole("dialog", { name: "Save this form to your account" });
+  await expect(dialog.getByRole("heading", { name: "Sign in to save this form" })).toBeVisible();
+  await dialog.getByRole("button", { name: "New here? Create an account" }).click();
   await expect(dialog.getByRole("heading", { name: "Create a free account" })).toBeVisible();
   await expect(dialog.getByLabel("Name")).toHaveCount(0);
   await dialog.getByLabel("Email").fill("ada@example.com");
@@ -263,7 +265,7 @@ test("keeps the guest publish gate usable at 360 pixels with keyboard controls",
   await page.keyboard.press("Enter");
 
   const dialog = page.getByRole("dialog", { name: "Save this form to your account" });
-  await expect(dialog.getByRole("heading", { name: "Create a free account" })).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "Sign in to save this form" })).toBeVisible();
   await expect(dialog.getByLabel("Email")).toBeVisible();
   await expect(dialog.getByRole("link", { name: "Continue with Google" })).toHaveAttribute(
     "href",
@@ -315,6 +317,7 @@ test("keeps the claimed account draft when resumed publication fails and retries
   await page.getByRole("button", { name: "Publish" }).click();
 
   const dialog = page.getByRole("dialog", { name: "Save this form to your account" });
+  await dialog.getByRole("button", { name: "New here? Create an account" }).click();
   await dialog.getByLabel("Email").fill("ada@example.com");
   await dialog.getByLabel(/^Password/).fill("Password1");
   await dialog.getByLabel("Confirm password").fill("Password1");
@@ -339,6 +342,7 @@ test("keeps a claimed draft private until email verification then resumes publis
   await page.getByLabel("Form title").fill("Trusted public form");
   await page.getByRole("button", { name: "Publish" }).click();
   const authDialog = page.getByRole("dialog", { name: "Save this form to your account" });
+  await authDialog.getByRole("button", { name: "New here? Create an account" }).click();
   await authDialog.getByLabel("Email").fill("ada@example.com");
   await authDialog.getByLabel(/^Password/).fill("Password1");
   await authDialog.getByLabel("Confirm password").fill("Password1");
@@ -370,7 +374,6 @@ test("keeps the local draft and retries a failed claim without another sign-in",
 
   await page.getByRole("button", { name: "Sign in" }).click();
   const dialog = page.getByRole("dialog", { name: "Save this form to your account" });
-  await dialog.getByRole("button", { name: "Already have an account? Sign in" }).click();
   await dialog.getByLabel("Email").fill("ada@example.com");
   await dialog.getByLabel("Password", { exact: true }).fill("Password1");
   await dialog.getByRole("button", { name: "Sign in and save form" }).click();

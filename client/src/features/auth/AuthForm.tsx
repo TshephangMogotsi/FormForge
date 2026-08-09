@@ -64,9 +64,7 @@ export function AuthForm({
   socialReturnTo = "/dashboard"
 }: AuthFormProps) {
   const titleId = useId();
-  const [mode, setMode] = useState<AuthMode>(
-    resetToken ? "reset" : context === "reauth" ? "login" : "register"
-  );
+  const [mode, setMode] = useState<AuthMode>(resetToken ? "reset" : "login");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(initialError);
   const [notice, setNotice] = useState<string | null>(null);

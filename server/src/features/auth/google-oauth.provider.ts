@@ -25,6 +25,7 @@ export class GoogleOAuthProvider implements SocialOAuthProvider {
       redirect_uri: this.redirectUri,
       response_type: "code",
       scope: "openid email profile",
+      prompt: "select_account",
       state: input.state,
       nonce: input.nonce,
       code_challenge: input.codeChallenge,

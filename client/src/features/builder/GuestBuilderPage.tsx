@@ -263,9 +263,6 @@ export function GuestBuilderPage({
                 }}
                 socialReturnTo={`/build/new?resume=${pendingIntentRef.current}`}
               />
-              <button className="guest-auth-dismiss button-reset" type="button" onClick={() => setDialog(null)}>
-                Keep editing without an account
-              </button>
             </div>
           )
         ) : (
