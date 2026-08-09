@@ -23,7 +23,13 @@ All errors include a correlation ID:
 
 ## System
 
-- `GET /api/health`
+- `GET /api/health/live` — process liveness; does not depend on MongoDB.
+- `GET /api/health/ready` — dependency readiness; returns `503` until a bounded
+  MongoDB ping succeeds.
+- `GET /api/health` — compatibility summary for existing monitors.
+
+New container checks use liveness, while load-balancer and deployment gates use
+readiness.
 
 ## Authentication
 
@@ -130,3 +136,12 @@ one answer per stable field ID:
 The API rejects duplicate or unknown field IDs, missing required answers, incorrect
 value types, and dropdown values absent from the published options. Successful
 responses return only a submission ID, form version, and submission timestamp.
+
+## Limits and abuse handling
+
+JSON request bodies are capped at 100 KB and return `413 PAYLOAD_TOO_LARGE` when
+exceeded. List endpoints accept `limit` values from 1 through 50. Repeated requests
+return `429 RATE_LIMITED` with standard rate-limit headers and `Retry-After`.
+
+The exact windows, limits, known abuse cases, and scaling limitation of the current
+process-local counters are documented in `docs/ABUSE_CASES.md`.

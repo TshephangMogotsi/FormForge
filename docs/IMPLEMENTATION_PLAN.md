@@ -50,16 +50,17 @@
 - [ ] Add a local Compose stack with MongoDB.
 - [x] Add CI for types, tests, production builds, and immutable container images.
 - [x] Add browser interaction coverage and isolated pull request preview deployments.
-- [ ] Add dependency-aware readiness checks.
+- [x] Add dependency-aware readiness checks.
 - [x] Add structured request logging and error correlation IDs.
-- [ ] Test the public form at mobile breakpoints and under network throttling.
-- [ ] Add API pagination limits, rate-limit policy, and abuse-case documentation.
+- [x] Test the public form at mobile breakpoints and under network throttling.
+- [x] Add API pagination limits, rate-limit policy, and abuse-case documentation.
 - [x] Document and codify the AWS registry, OIDC, IAM, and managed-secret
   foundation for an ECS reference deployment.
-- [ ] Resolve the production Atlas network-access boundary.
+- [x] Resolve the no-cost MVP Atlas boundary with explicit risk acceptance and
+  least-privilege compensating controls.
 - [x] Deploy the ECS runtime and verify CloudWatch logs and health checks.
 - [x] Add a rollback-aware deployment workflow.
-- [ ] Add an operational runbook.
+- [x] Add an operational runbook.
 
 ## Optional differentiator after the core is complete
 

@@ -106,7 +106,8 @@ control; `.env` is ignored. The default development endpoints are:
 
 - React: `http://localhost:5173`
 - API: `http://localhost:4000`
-- Health: `http://localhost:4000/api/health`
+- Liveness: `http://localhost:4000/api/health/live`
+- Readiness: `http://localhost:4000/api/health/ready`
 
 `CLIENT_ORIGIN` and `PUBLIC_APP_ORIGIN` should remain
 `http://localhost:5173` locally. Password-reset delivery is optional during
@@ -125,12 +126,12 @@ npm run build
 | Check | Current coverage |
 | --- | --- |
 | Type checking | Client and server TypeScript workspaces |
-| Integration tests | 20 API tests covering auth, isolation, drafts, duplication, publishing, submissions, and analytics |
-| Browser tests | 4 Chromium flows covering responsive layout, keyboard menus, destructive dialogs, and analytics drill-down |
+| Integration tests | 24 API tests covering auth, isolation, limits, health, drafts, duplication, publishing, submissions, and analytics |
+| Browser tests | 5 Chromium flows covering responsive layout, throttled public forms, keyboard menus, destructive dialogs, and analytics drill-down |
 | Production build | Compiled Express server and code-split Vite client |
 | Preview delivery | PR-scoped ECS services with isolated databases and automatic teardown |
 | Container publication | Immutable `sha-*` and `pr-*` images in GHCR or private ECR |
-| Production smoke test | External `/api/health` check after ECS service stabilization |
+| Production smoke test | External `/api/health/ready` check after ECS service stabilization |
 
 The badge at the top reflects the latest `main` verification result.
 

@@ -185,3 +185,61 @@ established at Cloudflare. Adding CloudFront and an ACM certificate was rejected
 for the first release because it would duplicate an existing edge and introduce
 another billed distribution. A direct DNS-only CNAME was rejected because the
 AWS-managed certificate does not cover the branded hostname.
+
+## ADR-020: Treat the form lifecycle as a release-critical workflow
+
+The core user journey of creating a form, publishing it, collecting submissions,
+and reviewing responses was exercised successfully in local validation. This path is
+now treated as a release-critical workflow and should remain intact through future
+changes to publishing, submission handling, or response analytics.
+
+The MVP keeps this behavior covered by explicit manual verification and future
+regression tests rather than relying on isolated unit tests alone. This avoids a
+situation where a change appears correct in one layer while breaking the full
+end-to-end submission experience.
+
+## ADR-021: Separate liveness from dependency readiness
+
+The container exposes `/api/health/live` for process health and
+`/api/health/ready` for traffic readiness. Readiness performs a bounded MongoDB ping
+and returns `503` when the dependency is unavailable. Container health uses liveness;
+ECS load-balancer and deployment gates use readiness.
+
+Using one always-successful endpoint for both signals was rejected because it can send
+traffic to a task that cannot serve database-backed requests. Using readiness as the
+container liveness check was also rejected because a transient Atlas incident could
+restart healthy application processes and amplify the outage.
+
+## ADR-022: Centralize bounded, process-local API limits
+
+FormForge keeps explicit general API, credential, password-recovery, and public
+submission limits behind one middleware factory. Rate-limit failures use the shared
+correlation-aware error shape, JSON bodies are capped at 100 KB, and paginated reads
+are bounded to 50 items.
+
+The in-memory limiter is deliberately described as per-task protection rather than a
+globally exact quota. A shared counter or edge WAF rule is deferred until task count or
+measured abuse requires it. Raising limits without evidence and claiming distributed
+enforcement from independent task memory were rejected.
+
+## ADR-023: Accept public Atlas connectivity for the no-cost MVP
+
+The portfolio MVP keeps Atlas Free or Flex and connects through Atlas's public TLS
+endpoint. ECS Express tasks receive dynamic public addresses, so the current topology
+cannot provide a stable narrow IP allowlist without adding a paid network or database
+boundary. A broad Atlas access entry, if required, is accepted as a documented residual
+risk for the demo rather than described as private or fully production-hardened.
+
+The compensating controls are a unique strong credential, a database user restricted
+to the FormForge database, SSM `SecureString` injection, TLS, separate preview
+credentials, safe logs, and rotation. A dedicated Atlas cluster with AWS PrivateLink
+remains the preferred upgrade when real customer data, paid usage, or a security review
+justifies its cost. Self-hosting MongoDB and adding NAT solely to avoid Atlas pricing
+were rejected because they add different recurring costs and operational responsibility
+without improving the no-cost MVP.
+
+Read-only AWS verification on 2026-08-09 confirmed that production runs in three
+public subnets, its task security group permits public egress, and MongoDB configuration
+is injected from an SSM `SecureString` rather than a plain environment value. Atlas
+user roles and the Atlas-side network access list remain separate console checks; this
+decision does not claim they were verified from AWS.
