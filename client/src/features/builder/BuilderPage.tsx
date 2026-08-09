@@ -52,6 +52,7 @@ import {
   type User
 } from "../../lib/api";
 import { AuthForm } from "../auth/AuthForm";
+import { EmailVerificationPrompt } from "../auth/EmailVerificationPrompt";
 import type { FormDraft } from "./form-draft";
 
 type SaveState = "saved" | "unsaved" | "saving" | "error";
@@ -66,8 +67,8 @@ type BuilderPageProps =
       onSaved: (form: FormSummary) => void;
       initialIntent?: "publish";
       onInitialIntentHandled?: () => void;
-      expectedUserId: string;
-      onReauthenticated: (user: User) => void;
+      user: User;
+      onUserUpdated: (user: User) => void;
     }
   | {
       mode: "guest";
@@ -413,6 +414,8 @@ export function BuilderPage(props: BuilderPageProps) {
   const [linkCopied, setLinkCopied] = useState(false);
   const [reauthIntent, setReauthIntent] = useState<BuilderIntent | null>(null);
   const reauthDialogRef = useRef<HTMLDialogElement>(null);
+  const [verificationRequired, setVerificationRequired] = useState(false);
+  const verificationDialogRef = useRef<HTMLDialogElement>(null);
   const initialIntentAttempted = useRef(false);
   const lastSavedSnapshot = useRef(
     guestMode ? JSON.stringify(initialDraftRef.current) : ""
@@ -430,6 +433,13 @@ export function BuilderPage(props: BuilderPageProps) {
     if (reauthIntent && !element.open) element.showModal();
     if (!reauthIntent && element.open) element.close();
   }, [reauthIntent]);
+
+  useEffect(() => {
+    const element = verificationDialogRef.current;
+    if (!element) return;
+    if (verificationRequired && !element.open) element.showModal();
+    if (!verificationRequired && element.open) element.close();
+  }, [verificationRequired]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -614,6 +624,8 @@ export function BuilderPage(props: BuilderPageProps) {
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         setReauthIntent("publish");
+      } else if (error instanceof ApiError && error.code === "EMAIL_VERIFICATION_REQUIRED") {
+        setVerificationRequired(true);
       } else {
         setSaveError(error instanceof Error ? error.message : "The form could not be published.");
         setRetryAction("publish");
@@ -630,12 +642,12 @@ export function BuilderPage(props: BuilderPageProps) {
 
   function handleReauthenticated(user: User) {
     if (props.mode !== "owned") return;
-    if (user.id !== props.expectedUserId) {
+    if (user.id !== props.user.id) {
       throw new Error("Sign in with the account that owns this form.");
     }
 
     const intent = reauthIntent;
-    props.onReauthenticated(user);
+    props.onUserUpdated(user);
     setReauthIntent(null);
     if (intent === "publish") void handlePublish();
     else void saveDraft();
@@ -939,6 +951,27 @@ export function BuilderPage(props: BuilderPageProps) {
               Keep editing for now
             </button>
           </div>
+        </dialog>
+      )}
+      {props.mode === "owned" && (
+        <dialog
+          className="dashboard-dialog verification-dialog"
+          ref={verificationDialogRef}
+          aria-label="Verify your email to publish"
+          onCancel={(event) => {
+            event.preventDefault();
+            setVerificationRequired(false);
+          }}
+        >
+          <EmailVerificationPrompt
+            user={props.user}
+            onUserUpdated={props.onUserUpdated}
+            onDismiss={() => setVerificationRequired(false)}
+            onVerified={() => {
+              setVerificationRequired(false);
+              void handlePublish();
+            }}
+          />
         </dialog>
       )}
       <DragOverlay>

@@ -122,6 +122,20 @@ export const createSubmissionSchema = z
     });
   });
 
+export const abuseReportSchema = z
+  .object({
+    reason: z.enum(["spam", "phishing", "harmful", "other"]),
+    details: z.string().trim().max(1000).default(""),
+    reporterEmail: z.union([z.literal(""), z.string().trim().email().max(254)]).default("")
+  })
+  .strict()
+  .transform((input) => ({
+    ...input,
+    reporterEmail: input.reporterEmail || null
+  }));
+
+export type AbuseReportInput = z.infer<typeof abuseReportSchema>;
+
 export const listFormsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(50).default(20)

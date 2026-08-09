@@ -9,11 +9,14 @@ import {
 } from "../../middleware/rate-limit.js";
 import { authCookieName } from "./auth.constants.js";
 import {
+  changeEmailSchema,
   forgotPasswordSchema,
   loginSchema,
   registerSchema,
-  resetPasswordSchema
+  resetPasswordSchema,
+  verifyEmailSchema
 } from "./auth.schemas.js";
+import { requireAuthentication } from "./auth.middleware.js";
 import type { AuthService } from "./auth.service.js";
 
 const authCookieOptions: CookieOptions = {
@@ -28,6 +31,7 @@ export function createAuthRouter(authService: AuthService) {
   const router = Router();
   const credentialLimiter = createRateLimiter(rateLimitPolicies.credentials);
   const recoveryLimiter = createRateLimiter(rateLimitPolicies.passwordRecovery);
+  const verificationLimiter = createRateLimiter(rateLimitPolicies.emailVerification);
 
   router.post(
     "/register",
@@ -50,6 +54,46 @@ export function createAuthRouter(authService: AuthService) {
 
       response.cookie(authCookieName, result.token, authCookieOptions);
       response.json({ data: { user: result.user } });
+    })
+  );
+
+  router.post(
+    "/email-verification",
+    requireAuthentication(authService),
+    verificationLimiter,
+    asyncHandler(async (request, response) => {
+      const result = await authService.requestEmailVerification(request.auth!.userId);
+      response.status(result.alreadyVerified ? 200 : 202).json({
+        data: {
+          user: result.user,
+          message: result.alreadyVerified
+            ? "Your email is already verified."
+            : "A new verification link has been sent."
+        }
+      });
+    })
+  );
+
+  router.post(
+    "/verify-email",
+    verificationLimiter,
+    asyncHandler(async (request, response) => {
+      const input = verifyEmailSchema.parse(request.body);
+      await authService.verifyEmail(input.token);
+      response.json({ data: { verified: true } });
+    })
+  );
+
+  router.patch(
+    "/email",
+    requireAuthentication(authService),
+    verificationLimiter,
+    asyncHandler(async (request, response) => {
+      const input = changeEmailSchema.parse(request.body);
+      const user = await authService.changeEmail(request.auth!.userId, input);
+      response.json({
+        data: { user, message: "Email updated. A new verification link has been sent." }
+      });
     })
   );
 

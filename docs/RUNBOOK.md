@@ -94,6 +94,26 @@ Atlas, SES, DNS, or Cloudflare incident.
    permission without exposing recipients or tokens.
 4. Keep the generic reset response; do not reveal account existence while diagnosing.
 
+### Email-verification delivery failures
+
+1. Check safe `email_verification.delivery_failed` metadata without logging recipients or tokens.
+2. Confirm the shared SES sender identity, production-access status, task-role permission,
+   and `PUBLIC_APP_ORIGIN`.
+3. Keep claimed drafts private and intact; do not bypass verification to resolve a
+   delivery incident.
+4. After recovery, use the authenticated resend action so the preceding token is replaced.
+
+### Abuse-report review
+
+1. Review only `new` records in the `abusereports` collection through restricted operator access.
+2. Open the referenced published slug without submitting data and assess it against
+   `docs/ABUSE_CASES.md` and the acceptable-use page.
+3. Do not copy report details or reporter email into logs or broad-access tickets.
+4. If abuse is confirmed, preserve the minimum evidence required, unpublish or remove
+   the form through an audited operator procedure, and mark the report reviewed.
+5. Repeated malicious accounts require an account-restriction capability before the
+   public trial expands; do not rely only on IP limits.
+
 ## Secret rotation
 
 1. Create the replacement credential with least privilege.

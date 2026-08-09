@@ -1,11 +1,13 @@
 import { compare, hash } from "bcryptjs";
 import { AppError } from "../../lib/app-error.js";
 import type {
+  ChangeEmailInput,
   ForgotPasswordInput,
   LoginInput,
   RegisterInput,
   ResetPasswordInput
 } from "./auth.schemas.js";
+import { EmailVerificationService } from "./email-verification.service.js";
 import { PasswordResetService } from "./password-reset.service.js";
 import { SessionService } from "./session.service.js";
 import type { UserRecord, UserRepository } from "./user.repository.js";
@@ -22,6 +24,7 @@ function toPublicUser(user: UserRecord): PublicUser {
     id: user.id,
     name: user.name,
     email: user.email,
+    emailVerifiedAt: user.emailVerifiedAt,
     createdAt: user.createdAt
   };
 }
@@ -31,6 +34,7 @@ export class AuthService {
     private readonly users: UserRepository,
     private readonly sessions: SessionService,
     private readonly passwordResets: PasswordResetService,
+    private readonly emailVerifications: EmailVerificationService,
     private readonly passwordCost = 12
   ) {}
 
@@ -46,6 +50,7 @@ export class AuthService {
       email: input.email,
       passwordHash
     });
+    await this.emailVerifications.request(user);
 
     return {
       user: toPublicUser(user),
@@ -76,6 +81,84 @@ export class AuthService {
     }
 
     return toPublicUser(user);
+  }
+
+  async requireVerifiedEmail(userId: string): Promise<void> {
+    const user = await this.users.findById(userId);
+    if (!user) {
+      throw new AppError(401, "UNAUTHENTICATED", "Authentication is required.");
+    }
+    if (!user.emailVerifiedAt) {
+      throw new AppError(
+        403,
+        "EMAIL_VERIFICATION_REQUIRED",
+        "Verify your email before publishing your first form."
+      );
+    }
+  }
+
+  async requestEmailVerification(userId: string): Promise<{
+    alreadyVerified: boolean;
+    user: PublicUser;
+  }> {
+    const user = await this.users.findById(userId);
+    if (!user) {
+      throw new AppError(401, "UNAUTHENTICATED", "Authentication is required.");
+    }
+    if (user.emailVerifiedAt) {
+      await this.emailVerifications.clear(user.id);
+      return { alreadyVerified: true, user: toPublicUser(user) };
+    }
+
+    await this.emailVerifications.request(user);
+    return { alreadyVerified: false, user: toPublicUser(user) };
+  }
+
+  async verifyEmail(token: string): Promise<PublicUser> {
+    const userId = await this.emailVerifications.consume(token);
+    const user = await this.users.markEmailVerified(userId, new Date());
+    if (!user) {
+      throw new AppError(400, "INVALID_VERIFICATION_TOKEN", "This verification link is invalid or has expired.");
+    }
+    return toPublicUser(user);
+  }
+
+  async changeEmail(userId: string, input: ChangeEmailInput): Promise<PublicUser> {
+    const user = await this.users.findById(userId);
+    const validPassword = user ? await compare(input.password, user.passwordHash) : false;
+    if (!user || !validPassword) {
+      throw new AppError(401, "INVALID_CREDENTIALS", "Your password is incorrect.");
+    }
+
+    if (user.emailVerifiedAt) {
+      if (user.email === input.email) return toPublicUser(user);
+      throw new AppError(
+        409,
+        "VERIFIED_EMAIL_CHANGE_UNAVAILABLE",
+        "Verified email changes are not available during the public trial."
+      );
+    }
+
+    if (user.email !== input.email) {
+      const existing = await this.users.findByEmail(input.email);
+      if (existing && existing.id !== user.id) {
+        throw new AppError(409, "EMAIL_IN_USE", "An account already exists for this email.");
+      }
+    }
+
+    let updated = user;
+    if (user.email !== input.email) {
+      try {
+        updated = (await this.users.updateEmail(user.id, input.email)) ?? user;
+      } catch (error) {
+        if ((error as { code?: number }).code === 11000) {
+          throw new AppError(409, "EMAIL_IN_USE", "An account already exists for this email.");
+        }
+        throw error;
+      }
+    }
+    await this.emailVerifications.request(updated);
+    return toPublicUser(updated);
   }
 
   logout(token: string): Promise<void> {

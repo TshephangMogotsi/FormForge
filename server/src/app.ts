@@ -8,6 +8,11 @@ import { env } from "./config/env.js";
 import { createAuthRouter } from "./features/auth/auth.routes.js";
 import { AuthService } from "./features/auth/auth.service.js";
 import {
+  DisabledEmailVerificationNotifier
+} from "./features/auth/email-verification.notifier.js";
+import { MongooseEmailVerificationRepository } from "./features/auth/email-verification.repository.js";
+import { EmailVerificationService } from "./features/auth/email-verification.service.js";
+import {
   DisabledPasswordResetNotifier
 } from "./features/auth/password-reset.notifier.js";
 import { MongoosePasswordResetRepository } from "./features/auth/password-reset.repository.js";
@@ -15,6 +20,7 @@ import { PasswordResetService } from "./features/auth/password-reset.service.js"
 import { MongooseSessionRepository } from "./features/auth/session.repository.js";
 import { SessionService } from "./features/auth/session.service.js";
 import { SesPasswordResetNotifier } from "./features/auth/ses-password-reset.notifier.js";
+import { SesEmailVerificationNotifier } from "./features/auth/ses-email-verification.notifier.js";
 import { MongooseUserRepository } from "./features/auth/user.repository.js";
 import { MongooseFormRepository } from "./features/forms/form.repository.js";
 import { createFormRouter } from "./features/forms/form.routes.js";
@@ -44,6 +50,9 @@ function createDefaultServices(): AppServices {
   const passwordResetNotifier = env.PASSWORD_RESET_FROM_EMAIL
     ? new SesPasswordResetNotifier(env.PASSWORD_RESET_FROM_EMAIL)
     : new DisabledPasswordResetNotifier();
+  const emailVerificationNotifier = env.PASSWORD_RESET_FROM_EMAIL
+    ? new SesEmailVerificationNotifier(env.PASSWORD_RESET_FROM_EMAIL)
+    : new DisabledEmailVerificationNotifier();
 
   return {
     auth: new AuthService(
@@ -54,9 +63,18 @@ function createDefaultServices(): AppServices {
         passwordResetNotifier,
         env.PUBLIC_APP_ORIGIN,
         env.PASSWORD_RESET_TTL_MINUTES
+      ),
+      new EmailVerificationService(
+        new MongooseEmailVerificationRepository(),
+        emailVerificationNotifier,
+        env.PUBLIC_APP_ORIGIN,
+        env.EMAIL_VERIFICATION_TTL_MINUTES
       )
     ),
-    forms: new FormService(new MongooseFormRepository())
+    forms: new FormService(new MongooseFormRepository(), {
+      maxFormsPerOwner: env.TRIAL_MAX_FORMS_PER_ACCOUNT,
+      maxPublishedFormsPerOwner: env.TRIAL_MAX_PUBLISHED_FORMS_PER_ACCOUNT
+    })
   };
 }
 

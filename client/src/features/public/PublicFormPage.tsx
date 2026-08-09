@@ -244,6 +244,10 @@ export function PublicFormPage({ slug }: { slug: string }) {
           <h1>Response received</h1>
           <p>Thanks—your response has been securely recorded.</p>
           <span className="public-powered"><Blocks size={15} /> Powered by FormForge</span>
+          <span className="public-trust-links">
+            <a href="/privacy">Privacy</a>
+            <a href={`/report-abuse?form=${encodeURIComponent(slug)}`}>Report abuse</a>
+          </span>
         </section>
       </main>
     );
@@ -285,6 +289,10 @@ export function PublicFormPage({ slug }: { slug: string }) {
           {submitting ? "Submitting…" : "Submit response"}
         </button>
         <span className="public-powered"><Blocks size={15} /> Powered by FormForge</span>
+        <span className="public-trust-links">
+          <a href="/privacy">Privacy</a>
+          <a href={`/report-abuse?form=${encodeURIComponent(slug)}`}>Report abuse</a>
+        </span>
       </form>
     </main>
   );

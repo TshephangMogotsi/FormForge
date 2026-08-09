@@ -4,6 +4,7 @@ export type UserRecord = {
   id: string;
   name: string;
   email: string;
+  emailVerifiedAt: Date | null;
   passwordHash: string;
   createdAt: Date;
   updatedAt: Date;
@@ -16,12 +17,15 @@ export interface UserRepository {
   findByEmail(email: string): Promise<UserRecord | null>;
   findById(userId: string): Promise<UserRecord | null>;
   updatePasswordHash(userId: string, passwordHash: string): Promise<boolean>;
+  markEmailVerified(userId: string, verifiedAt: Date): Promise<UserRecord | null>;
+  updateEmail(userId: string, email: string): Promise<UserRecord | null>;
 }
 
 function toUserRecord(document: {
   id: string;
   name: string;
   email: string;
+  emailVerifiedAt: Date | null;
   passwordHash: string;
   createdAt: Date;
   updatedAt: Date;
@@ -30,6 +34,7 @@ function toUserRecord(document: {
     id: document.id,
     name: document.name,
     email: document.email,
+    emailVerifiedAt: document.emailVerifiedAt,
     passwordHash: document.passwordHash,
     createdAt: document.createdAt,
     updatedAt: document.updatedAt
@@ -58,5 +63,23 @@ export class MongooseUserRepository implements UserRepository {
       { $set: { passwordHash } }
     ).exec();
     return result.matchedCount === 1;
+  }
+
+  async markEmailVerified(userId: string, verifiedAt: Date): Promise<UserRecord | null> {
+    const user = await UserModel.findByIdAndUpdate(
+      userId,
+      { $set: { emailVerifiedAt: verifiedAt } },
+      { new: true }
+    ).select("+passwordHash").exec();
+    return user ? toUserRecord(user) : null;
+  }
+
+  async updateEmail(userId: string, email: string): Promise<UserRecord | null> {
+    const user = await UserModel.findByIdAndUpdate(
+      userId,
+      { $set: { email, emailVerifiedAt: null } },
+      { new: true, runValidators: true }
+    ).select("+passwordHash").exec();
+    return user ? toUserRecord(user) : null;
   }
 }

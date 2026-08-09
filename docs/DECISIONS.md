@@ -269,3 +269,18 @@ would create bot-accessible writes, abandoned database records, retention work, 
 account-linking complexity before the product needs cross-device guest drafts. Storing
 only transient React state was rejected because refreshes and authentication failures
 would destroy work at the highest-value conversion point.
+
+## ADR-025: Gate public hosting with verified identity and bounded trial limits
+
+Guest editing and account draft persistence remain friction-light, but the API requires
+a verified email before any publication. Verification uses a separate hashed,
+single-use, expiring token lifecycle with resend and authenticated email correction.
+Publication requests, verification operations, public submissions, and abuse reports
+have distinct rate limits. The initial trial defaults to 25 forms and 5 distinct live
+forms per account, while allowing updates to an existing live form.
+
+Default CAPTCHA was rejected because it adds accessibility and conversion cost before
+measured abuse justifies it. Allowing unverified publication was rejected because it
+would let disposable automated accounts silently host phishing or spam. The account
+caps use owner-scoped count-before-write checks; this is intentionally documented as a
+single-task trial boundary rather than a globally exact distributed quota.

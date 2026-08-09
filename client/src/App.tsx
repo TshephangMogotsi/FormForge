@@ -9,12 +9,14 @@ import {
   Settings
 } from "lucide-react";
 import { AuthPage } from "./features/auth/AuthPage";
+import { EmailVerificationPage } from "./features/auth/EmailVerificationPage";
 import type { BuilderIntent } from "./features/builder/BuilderPage";
 import {
   DashboardPage,
   type PendingFormAction
 } from "./features/dashboard/DashboardPage";
 import { AnalyticsOverviewPage } from "./features/responses/AnalyticsOverviewPage";
+import { TrustPage } from "./features/trust/TrustPage";
 import { api, type FormSummary, type User } from "./lib/api";
 
 const BuilderPage = lazy(() =>
@@ -44,6 +46,13 @@ function formIdFromPath(pathname: string) {
 
 function analyticsFormIdFromPath(pathname: string) {
   return pathname.match(/^\/analytics\/([a-f\d]{24})\/?$/i)?.[1] ?? null;
+}
+
+function trustPageFromPath(pathname: string) {
+  if (/^\/privacy\/?$/.test(pathname)) return "privacy" as const;
+  if (/^\/acceptable-use\/?$/.test(pathname)) return "acceptable-use" as const;
+  if (/^\/report-abuse\/?$/.test(pathname)) return "report-abuse" as const;
+  return null;
 }
 
 function viewFromPath(pathname: string): View {
@@ -156,9 +165,11 @@ export default function App() {
   const activePublicSlug = publicSlug(pathname);
   const guestRoute = pathname === "/build/new" || pathname === "/build/new/";
   const loginRoute = pathname === "/login" || pathname === "/login/";
+  const verificationRoute = pathname === "/verify-email" || pathname === "/verify-email/";
+  const trustPage = trustPageFromPath(pathname);
   const [user, setUser] = useState<User | null>(null);
   const [checkingSession, setCheckingSession] = useState(
-    activePublicSlug === null && !guestRoute && !loginRoute && pathname !== "/"
+    activePublicSlug === null && !verificationRoute && !trustPage && !guestRoute && !loginRoute && pathname !== "/"
   );
   const [view, setView] = useState<View>(() => viewFromPath(window.location.pathname));
   const [forms, setForms] = useState<FormSummary[]>([]);
@@ -188,13 +199,13 @@ export default function App() {
   }, [pathname]);
 
   useEffect(() => {
-    if (activePublicSlug) return;
+    if (activePublicSlug || verificationRoute || trustPage) return;
     api
       .me()
       .then(setUser)
       .catch(() => setUser(null))
       .finally(() => setCheckingSession(false));
-  }, [activePublicSlug]);
+  }, [activePublicSlug, trustPage, verificationRoute]);
 
   useEffect(() => {
     if (!user) {
@@ -380,6 +391,23 @@ export default function App() {
     );
   }
 
+  if (verificationRoute) {
+    return (
+      <EmailVerificationPage
+        onVerified={() => {
+          api.me()
+            .then((currentUser) => {
+              setUser(currentUser);
+              navigate("/dashboard", true);
+            })
+            .catch(() => navigate("/login", true));
+        }}
+      />
+    );
+  }
+
+  if (trustPage) return <TrustPage kind={trustPage} />;
+
   if (guestRoute || (pathname === "/" && !user && !checkingSession)) {
     return (
       <Suspense fallback={<AppLoading />}>
@@ -458,8 +486,8 @@ export default function App() {
             formId={activeForm.id}
             initialIntent={pendingBuilderIntent === "publish" ? "publish" : undefined}
             onInitialIntentHandled={() => setPendingBuilderIntent(null)}
-            expectedUserId={user.id}
-            onReauthenticated={setUser}
+            user={user}
+            onUserUpdated={setUser}
             onBack={() => {
               setView("dashboard");
               navigate("/dashboard");

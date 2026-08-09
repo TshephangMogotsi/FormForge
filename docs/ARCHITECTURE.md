@@ -114,6 +114,10 @@ general API boundary.
 - Password-reset requests return the same response for known and unknown email
   addresses. Reset tokens are random, stored only as SHA-256 digests, expire,
   are consumed once, and revoke all existing sessions after a password change.
+- Email-verification tokens are independently hashed, expiring, and single-use.
+  Unverified owners can retain private drafts but the API rejects publication.
+- Publication, verification, public submission, and abuse-report writes have distinct
+  rate-limit policies. Owner-scoped trial caps bound forms and distinct live forms.
 - Ownership is included in MongoDB read, update, and delete filters. An inaccessible
   resource returns `404` so its existence is not disclosed.
 - Public slugs identify published forms but do not grant owner access.

@@ -5,6 +5,7 @@ const { Schema } = mongoose;
 export type UserDatabaseRecord = {
   name: string;
   email: string;
+  emailVerifiedAt: Date | null;
   passwordHash: string;
   createdAt: Date;
   updatedAt: Date;
@@ -27,6 +28,10 @@ const userSchema = new Schema<UserDatabaseRecord>(
       maxlength: 254,
       unique: true,
       index: true
+    },
+    emailVerifiedAt: {
+      type: Date,
+      default: null
     },
     passwordHash: {
       type: String,

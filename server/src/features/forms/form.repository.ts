@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { FormModel } from "./form.model.js";
+import { AbuseReportModel } from "./abuse-report.model.js";
 import { PublishedFormModel } from "./published-form.model.js";
 import type { FormField, SubmissionAnswer } from "./form.schemas.js";
 import { SubmissionModel } from "./submission.model.js";
@@ -88,6 +89,9 @@ export interface FormRepository {
   claimGuestDraft(
     input: CreateFormRecord & { sourceGuestDraftId: string }
   ): Promise<FormRecord>;
+  findByOwnerAndGuestDraftId(ownerId: string, sourceGuestDraftId: string): Promise<FormRecord | null>;
+  countByOwner(ownerId: string): Promise<number>;
+  countPublishedByOwner(ownerId: string): Promise<number>;
   listByOwner(ownerId: string, page: number, limit: number): Promise<FormPage>;
   findByOwnerAndId(ownerId: string, formId: string): Promise<FormRecord | null>;
   updateByOwnerAndId(
@@ -100,6 +104,13 @@ export interface FormRepository {
     publication: PublishedFormRecord;
   } | null>;
   findPublishedBySlug(slug: string): Promise<PublishedFormRecord | null>;
+  createAbuseReport(input: {
+    formId: string;
+    slug: string;
+    reason: "spam" | "phishing" | "harmful" | "other";
+    details: string;
+    reporterEmail: string | null;
+  }): Promise<{ id: string; createdAt: Date }>;
   createSubmission(input: {
     formId: string;
     formVersion: number;
@@ -219,6 +230,22 @@ export class MongooseFormRepository implements FormRepository {
     }
   }
 
+  async findByOwnerAndGuestDraftId(
+    ownerId: string,
+    sourceGuestDraftId: string
+  ): Promise<FormRecord | null> {
+    const form = await FormModel.findOne({ ownerId, sourceGuestDraftId }).exec();
+    return form ? toFormRecord(form) : null;
+  }
+
+  countByOwner(ownerId: string): Promise<number> {
+    return FormModel.countDocuments({ ownerId }).exec();
+  }
+
+  countPublishedByOwner(ownerId: string): Promise<number> {
+    return FormModel.countDocuments({ ownerId, status: "published" }).exec();
+  }
+
   async listByOwner(ownerId: string, page: number, limit: number): Promise<FormPage> {
     const filter = { ownerId };
     const [forms, total] = await Promise.all([
@@ -317,6 +344,17 @@ export class MongooseFormRepository implements FormRepository {
     }).exec();
 
     return snapshot ? toPublishedFormRecord(snapshot, form.slug) : null;
+  }
+
+  async createAbuseReport(input: {
+    formId: string;
+    slug: string;
+    reason: "spam" | "phishing" | "harmful" | "other";
+    details: string;
+    reporterEmail: string | null;
+  }): Promise<{ id: string; createdAt: Date }> {
+    const report = await AbuseReportModel.create(input);
+    return { id: report.id, createdAt: report.createdAt };
   }
 
   async createSubmission(input: {

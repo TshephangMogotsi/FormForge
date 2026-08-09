@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { asyncHandler } from "../../lib/async-handler.js";
+import { createRateLimiter, rateLimitPolicies } from "../../middleware/rate-limit.js";
 import { requireAuthentication } from "../auth/auth.middleware.js";
 import type { AuthService } from "../auth/auth.service.js";
 import {
@@ -14,6 +15,7 @@ import type { FormService } from "./form.service.js";
 
 export function createFormRouter(authService: AuthService, formService: FormService) {
   const router = Router();
+  const publicationLimiter = createRateLimiter(rateLimitPolicies.publication);
 
   router.use(requireAuthentication(authService));
 
@@ -132,8 +134,10 @@ export function createFormRouter(authService: AuthService, formService: FormServ
 
   router.post(
     "/:formId/publish",
+    publicationLimiter,
     asyncHandler(async (request, response) => {
       const formId = formIdSchema.parse(request.params.formId);
+      await authService.requireVerifiedEmail(request.auth!.userId);
       const result = await formService.publish(request.auth!.userId, formId);
       response.status(201).json({ data: result });
     })

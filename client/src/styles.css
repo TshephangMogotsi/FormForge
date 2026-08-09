@@ -912,6 +912,246 @@ a {
   line-height: 1.55;
 }
 
+.verification-dialog {
+  width: min(500px, calc(100% - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+
+.verification-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.verification-icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border-radius: 13px;
+  color: var(--brand);
+  background: var(--brand-soft);
+  margin-bottom: 18px;
+}
+
+.verification-prompt h2 {
+  margin: 6px 0 8px;
+  font-family: "Manrope", sans-serif;
+  font-size: 24px;
+  letter-spacing: -0.04em;
+}
+
+.verification-prompt > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.verification-prompt .auth-error,
+.verification-prompt .auth-notice {
+  width: 100%;
+  margin-top: 16px;
+}
+
+.verification-actions {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+  margin-top: 22px;
+}
+
+.verification-prompt > .auth-switch {
+  align-self: center;
+  margin-top: 16px;
+}
+
+.verification-prompt > .guest-auth-dismiss {
+  margin: 14px auto 0;
+}
+
+.verification-change-form {
+  display: grid;
+  width: 100%;
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.verification-change-form label {
+  display: grid;
+  gap: 7px;
+  color: #465249;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.verification-change-form input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #d7ded8;
+  border-radius: 10px;
+  outline: none;
+  padding: 0 12px;
+}
+
+.verification-policy-copy {
+  width: 100%;
+  border-top: 1px solid var(--line);
+  margin-top: 20px !important;
+  padding-top: 16px;
+  font-size: 11px !important;
+}
+
+.verification-policy-copy a {
+  color: var(--brand);
+  font-weight: 700;
+}
+
+.verification-page {
+  display: flex;
+  width: min(720px, calc(100% - 32px));
+  min-height: 100vh;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 28px;
+  margin: 0 auto;
+  padding: 32px 0;
+}
+
+.verification-page-card {
+  display: flex;
+  width: min(460px, 100%);
+  align-items: center;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: white;
+  padding: 38px;
+  text-align: center;
+  box-shadow: 0 24px 70px rgba(31, 48, 37, 0.1);
+}
+
+.verification-page-card > svg {
+  margin-bottom: 18px;
+  color: var(--brand);
+}
+
+.verification-page-card h1 {
+  margin: 7px 0 8px;
+  font-family: "Manrope", sans-serif;
+  font-size: 28px;
+}
+
+.verification-page-card p {
+  margin: 0 0 22px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.trust-page {
+  width: min(760px, calc(100% - 32px));
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 42px 0;
+}
+
+.trust-page > .brand {
+  display: inline-flex;
+  margin-bottom: 32px;
+}
+
+.trust-card {
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: white;
+  padding: clamp(26px, 6vw, 52px);
+  box-shadow: 0 24px 70px rgba(31, 48, 37, 0.08);
+}
+
+.trust-card h1 {
+  margin: 8px 0 22px;
+  font-family: "Manrope", sans-serif;
+  font-size: clamp(30px, 6vw, 44px);
+  letter-spacing: -0.045em;
+}
+
+.trust-card h2 {
+  margin: 26px 0 7px;
+  font-family: "Manrope", sans-serif;
+  font-size: 18px;
+}
+
+.trust-card p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.trust-card > .secondary-button {
+  margin-top: 18px;
+}
+
+.trust-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  border-top: 1px solid var(--line);
+  margin-top: 34px;
+  padding-top: 20px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.trust-links a,
+.public-trust-links a {
+  color: var(--brand);
+}
+
+.trust-report-form {
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.trust-report-form label {
+  display: grid;
+  gap: 7px;
+  color: #465249;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.trust-report-form input,
+.trust-report-form select,
+.trust-report-form textarea {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #d7ded8;
+  border-radius: 10px;
+  outline: none;
+  background: white;
+  padding: 10px 12px;
+}
+
+.public-trust-links {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 10px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+@media (max-width: 520px) {
+  .verification-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
 .guest-claim-loading {
   display: flex;
   align-items: center;

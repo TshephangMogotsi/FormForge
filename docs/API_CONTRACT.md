@@ -39,6 +39,12 @@ readiness.
   same `202` response, whether or not the account exists.
 - `POST /api/v1/auth/reset-password` — consumes a single-use reset token,
   changes the password, and revokes every existing session.
+- `POST /api/v1/auth/email-verification` — authenticated resend; returns `200` without
+  sending when the address is already verified.
+- `POST /api/v1/auth/verify-email` — consumes a single-use email-verification token.
+- `PATCH /api/v1/auth/email` — corrects an unverified authenticated user's email after
+  checking the current password and sends a replacement link. Changes to an already
+  verified address are outside the public-trial scope.
 - `POST /api/v1/auth/logout` — revokes the current session and clears its cookie.
 - `GET /api/v1/auth/me` — returns the current public user.
 
@@ -48,6 +54,10 @@ and `Secure` in production.
 Registration and password reset both require `password` and `confirmPassword`.
 Reset tokens expire after 30 minutes by default. Only their SHA-256 digests are
 stored, and consuming a token atomically deletes it.
+
+Public users include `emailVerifiedAt`, which is `null` until verification. Verification
+tokens expire after 60 minutes by default, are stored only as SHA-256 digests, and are
+replaced whenever a link is resent or the email changes.
 
 ## Forms
 
@@ -143,12 +153,15 @@ Example draft update:
 
 Publishing returns both the updated owner form and the immutable live version.
 The first publish creates a stable public slug; later publishes retain that slug
-and increment the version.
+and increment the version. Every publication requires a verified email. The public
+trial defaults to 25 forms and 5 distinct published forms per account; updates to an
+already-published form remain available.
 
 ## Public forms
 
 - `GET /api/v1/public/forms/:slug`
 - `POST /api/v1/public/forms/:slug/submissions`
+- `POST /api/v1/public/forms/:slug/reports`
 
 Public reads return only the current published snapshot. Submission input contains
 one answer per stable field ID:
@@ -167,6 +180,10 @@ one answer per stable field ID:
 The API rejects duplicate or unknown field IDs, missing required answers, incorrect
 value types, and dropdown values absent from the published options. Successful
 responses return only a submission ID, form version, and submission timestamp.
+
+Abuse reports accept a reason (`spam`, `phishing`, `harmful`, or `other`), up to 1,000
+characters of detail, and an optional reporter email. Reports are accepted only for a
+currently published form and return only a report ID and timestamp.
 
 ## Limits and abuse handling
 

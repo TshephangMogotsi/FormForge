@@ -71,7 +71,7 @@
 - [x] Add contextual registration and login without leaving the builder.
 - [x] Claim guest drafts idempotently through the authenticated API.
 - [x] Resume save or publish intent after authentication.
-- [ ] Add first-publication trust and abuse controls.
+- [x] Add first-publication trust and abuse controls.
 - [ ] Add privacy-safe funnel measurement and launch verification.
 
 Detailed sequencing and exit criteria are in `docs/GUEST_BUILDER_PLAN.md`.

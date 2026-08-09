@@ -17,6 +17,8 @@ Enable a user to create a dynamic form, publish it, collect submissions, and rev
 - Draft autosave and preview.
 - Explicit publishing with a public slug.
 - Contextual authentication that claims a guest draft and resumes publication.
+- Email verification before first public publication.
+- Public-trial account caps, acceptable-use guidance, and abuse reporting.
 - Server-validated public submissions.
 - Paginated response table and basic analytics.
 

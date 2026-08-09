@@ -3,6 +3,7 @@ import { AppError } from "../../lib/app-error.js";
 import type {
   CreateFormInput,
   CreateSubmissionInput,
+  AbuseReportInput,
   FormField,
   SubmissionAnswer,
   UpdateFormInput
@@ -78,13 +79,27 @@ function validateAnswer(field: FormField, value: SubmissionAnswer["value"]): str
 }
 
 export class FormService {
-  constructor(private readonly forms: FormRepository) {}
+  constructor(
+    private readonly forms: FormRepository,
+    private readonly limits = { maxFormsPerOwner: 25, maxPublishedFormsPerOwner: 5 }
+  ) {}
+
+  private async requireFormCapacity(ownerId: string) {
+    if ((await this.forms.countByOwner(ownerId)) >= this.limits.maxFormsPerOwner) {
+      throw new AppError(
+        403,
+        "ACCOUNT_FORM_LIMIT_REACHED",
+        `The public trial allows up to ${this.limits.maxFormsPerOwner} forms per account.`
+      );
+    }
+  }
 
   list(ownerId: string, page: number, limit: number): Promise<FormPage> {
     return this.forms.listByOwner(ownerId, page, limit);
   }
 
-  create(ownerId: string, input: CreateFormInput): Promise<FormRecord> {
+  async create(ownerId: string, input: CreateFormInput): Promise<FormRecord> {
+    await this.requireFormCapacity(ownerId);
     return this.forms.create({
       ownerId,
       title: input.title,
@@ -93,11 +108,14 @@ export class FormService {
     });
   }
 
-  claimGuestDraft(
+  async claimGuestDraft(
     ownerId: string,
     sourceGuestDraftId: string,
     input: CreateFormInput
   ): Promise<FormRecord> {
+    const existing = await this.forms.findByOwnerAndGuestDraftId(ownerId, sourceGuestDraftId);
+    if (existing) return existing;
+    await this.requireFormCapacity(ownerId);
     return this.forms.claimGuestDraft({
       ownerId,
       sourceGuestDraftId,
@@ -121,6 +139,7 @@ export class FormService {
     if (!source) {
       throw new AppError(404, "FORM_NOT_FOUND", "Form not found.");
     }
+    await this.requireFormCapacity(ownerId);
 
     return this.forms.create({
       ownerId,
@@ -154,6 +173,16 @@ export class FormService {
     const draft = await this.get(ownerId, formId);
     if (draft.fields.length === 0) {
       throw new AppError(400, "EMPTY_FORM", "Add at least one field before publishing.");
+    }
+    if (
+      draft.status !== "published" &&
+      (await this.forms.countPublishedByOwner(ownerId)) >= this.limits.maxPublishedFormsPerOwner
+    ) {
+      throw new AppError(
+        403,
+        "ACCOUNT_PUBLICATION_LIMIT_REACHED",
+        `The public trial allows up to ${this.limits.maxPublishedFormsPerOwner} published forms per account.`
+      );
     }
 
     const result = await this.forms.publishByOwnerAndId(
@@ -217,6 +246,20 @@ export class FormService {
       formId: form.formId,
       formVersion: form.version,
       answers: normalizedAnswers
+    });
+  }
+
+  async reportAbuse(
+    slug: string,
+    input: AbuseReportInput
+  ): Promise<{ id: string; createdAt: Date }> {
+    const form = await this.getPublic(slug);
+    return this.forms.createAbuseReport({
+      formId: form.formId,
+      slug: form.slug,
+      reason: input.reason,
+      details: input.details,
+      reporterEmail: input.reporterEmail
     });
   }
 

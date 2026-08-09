@@ -72,11 +72,21 @@ const user = {
 
 async function mockClaimFlow(
   page: Page,
-  options: { failFirstClaim?: boolean; failFirstPublish?: boolean } = {}
+  options: {
+    failFirstClaim?: boolean;
+    failFirstPublish?: boolean;
+    requireEmailVerification?: boolean;
+  } = {}
 ) {
   let claimedForm: Record<string, unknown> | null = null;
   let claimAttempts = 0;
   let publishAttempts = 0;
+  let authenticated = false;
+  let currentUser = {
+    ...user,
+    emailVerifiedAt: options.requireEmailVerification ? null : "2026-08-09T08:00:00.000Z"
+  };
+  let verificationRequests = 0;
   const claimBodies: Array<Record<string, unknown>> = [];
 
   await page.route("**/api/v1/**", async (route) => {
@@ -84,10 +94,18 @@ async function mockClaimFlow(
     const path = new URL(request.url()).pathname;
 
     if (path === "/api/v1/auth/me") {
+      if (authenticated) return json(route, { data: { user: currentUser } });
       return json(route, { error: { code: "UNAUTHENTICATED", message: "Authentication is required." } }, 401);
     }
     if (path === "/api/v1/auth/register" || path === "/api/v1/auth/login") {
-      return json(route, { data: { user } }, path.endsWith("register") ? 201 : 200);
+      authenticated = true;
+      return json(route, { data: { user: currentUser } }, path.endsWith("register") ? 201 : 200);
+    }
+    if (path === "/api/v1/auth/email-verification" && request.method() === "POST") {
+      verificationRequests += 1;
+      return json(route, {
+        data: { user: currentUser, message: "A new verification link has been sent." }
+      }, 202);
     }
     if (/^\/api\/v1\/forms\/claims\/[0-9a-f-]+$/i.test(path) && request.method() === "PUT") {
       claimAttempts += 1;
@@ -119,6 +137,14 @@ async function mockClaimFlow(
     }
     if (path === `/api/v1/forms/${ownedFormId}/publish` && request.method() === "POST" && claimedForm) {
       publishAttempts += 1;
+      if (options.requireEmailVerification && !currentUser.emailVerifiedAt) {
+        return json(route, {
+          error: {
+            code: "EMAIL_VERIFICATION_REQUIRED",
+            message: "Verify your email before publishing your first form."
+          }
+        }, 403);
+      }
       if (options.failFirstPublish && publishAttempts === 1) {
         return json(route, { error: { code: "INTERNAL_ERROR", message: "Publication was interrupted." } }, 500);
       }
@@ -154,6 +180,10 @@ async function mockClaimFlow(
   return {
     get claimAttempts() { return claimAttempts; },
     get publishAttempts() { return publishAttempts; },
+    get verificationRequests() { return verificationRequests; },
+    verifyUser() {
+      currentUser = { ...currentUser, emailVerifiedAt: "2026-08-09T08:10:00.000Z" };
+    },
     claimBodies
   };
 }
@@ -202,6 +232,36 @@ test("keeps the claimed account draft when resumed publication fails and retries
   expect(await page.evaluate(() => localStorage.getItem("formforge.guest-draft.v1"))).toBeNull();
 
   await retry.click();
+  await expect(page.getByText("Form is live")).toBeVisible();
+  expect(requests.claimAttempts).toBe(1);
+  expect(requests.publishAttempts).toBe(2);
+});
+
+test("keeps a claimed draft private until email verification then resumes publishing", async ({ page }) => {
+  const requests = await mockClaimFlow(page, { requireEmailVerification: true });
+  await page.goto("/build/new");
+  await page.getByLabel("Form title").fill("Trusted public form");
+  await page.getByRole("button", { name: "Publish" }).click();
+  const authDialog = page.getByRole("dialog", { name: "Save this form to your account" });
+  await authDialog.getByLabel("Name").fill("Ada Builder");
+  await authDialog.getByLabel("Email").fill("ada@example.com");
+  await authDialog.getByLabel(/^Password/).fill("Password1");
+  await authDialog.getByLabel("Confirm password").fill("Password1");
+  await authDialog.getByRole("button", { name: "Create account and save form" }).click();
+
+  await expect(page).toHaveURL(`/forms/${ownedFormId}/edit`);
+  const verificationDialog = page.getByRole("dialog", { name: "Verify your email to publish" });
+  await expect(verificationDialog).toContainText("not public yet");
+  expect(requests.claimAttempts).toBe(1);
+  expect(requests.publishAttempts).toBe(1);
+
+  await verificationDialog.getByRole("button", { name: "Resend link" }).click();
+  await expect(verificationDialog).toContainText("A new verification link was sent");
+  expect(requests.verificationRequests).toBe(1);
+  requests.verifyUser();
+  await verificationDialog.getByRole("button", { name: "I’ve verified my email" }).click();
+
+  await expect(verificationDialog).not.toBeVisible();
   await expect(page.getByText("Form is live")).toBeVisible();
   expect(requests.claimAttempts).toBe(1);
   expect(requests.publishAttempts).toBe(2);
@@ -295,4 +355,23 @@ test("preserves an owned draft and resumes saving after the session expires", as
   await expect(page).toHaveURL(`/forms/${ownedFormId}/edit`);
   await expect(page.getByLabel("Form title")).toHaveValue("Unsaved title survives");
   expect(patchAttempts).toBe(2);
+});
+
+test("consumes an email verification link without leaving its token in the URL", async ({ page }) => {
+  await page.route("**/api/v1/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/v1/auth/verify-email") {
+      return json(route, { data: { verified: true } });
+    }
+    if (path === "/api/v1/auth/me") {
+      return json(route, { error: { code: "UNAUTHENTICATED", message: "Authentication is required." } }, 401);
+    }
+    return json(route, { error: { code: "UNMOCKED", message: "Unmocked request" } }, 500);
+  });
+
+  await page.goto(`/verify-email?token=${"v".repeat(40)}`);
+  await expect(page).toHaveURL("/verify-email");
+  await expect(page.getByRole("heading", { name: "You’re verified" })).toBeVisible();
+  await page.getByRole("button", { name: "Continue to FormForge" }).click();
+  await expect(page).toHaveURL("/login");
 });
