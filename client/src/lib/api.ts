@@ -2,6 +2,7 @@ export type User = {
   id: string;
   name: string;
   email: string;
+  emailVerifiedAt: string | null;
   createdAt: string;
 };
 
@@ -142,8 +143,14 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  async authProviders() {
+    const response = await apiRequest<{
+      data: { providers: { google: boolean; facebook: boolean } };
+    }>("/api/v1/auth/providers");
+    return response.data.providers;
+  },
+
   async register(input: {
-    name: string;
     email: string;
     password: string;
     confirmPassword: string;
@@ -190,6 +197,29 @@ export const api = {
     return apiRequest<void>("/api/v1/auth/logout", { method: "POST" });
   },
 
+  async requestEmailVerification() {
+    const response = await apiRequest<{ data: { user: User; message: string } }>(
+      "/api/v1/auth/email-verification",
+      { method: "POST" }
+    );
+    return response.data;
+  },
+
+  async verifyEmail(token: string) {
+    await apiRequest<{ data: { verified: true } }>(
+      "/api/v1/auth/verify-email",
+      { method: "POST", body: JSON.stringify({ token }) }
+    );
+  },
+
+  async changeEmail(input: { email: string; password: string }) {
+    const response = await apiRequest<{ data: { user: User; message: string } }>(
+      "/api/v1/auth/email",
+      { method: "PATCH", body: JSON.stringify(input) }
+    );
+    return response.data;
+  },
+
   async listForms() {
     const response = await apiRequest<{
       data: {
@@ -205,6 +235,20 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input)
     });
+    return response.data.form;
+  },
+
+  async claimGuestDraft(
+    guestDraftId: string,
+    draft: { title: string; description: string; fields: FormField[] }
+  ) {
+    const response = await apiRequest<{ data: { form: FormSummary } }>(
+      `/api/v1/forms/claims/${encodeURIComponent(guestDraftId)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(draft)
+      }
+    );
     return response.data.form;
   },
 
@@ -265,6 +309,23 @@ export const api = {
       body: JSON.stringify({ answers })
     });
     return response.data.submission;
+  },
+
+  async reportAbuse(
+    slug: string,
+    input: {
+      reason: "spam" | "phishing" | "harmful" | "other";
+      details: string;
+      reporterEmail: string;
+    }
+  ) {
+    const response = await apiRequest<{
+      data: { report: { id: string; submittedAt: string } };
+    }>(`/api/v1/public/forms/${encodeURIComponent(slug)}/reports`, {
+      method: "POST",
+      body: JSON.stringify(input)
+    });
+    return response.data.report;
   },
 
   async listSubmissions(formId: string, page = 1, limit = 10) {

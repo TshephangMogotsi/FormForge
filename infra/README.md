@@ -63,6 +63,22 @@ The Atlas URI belongs in an SSM Parameter Store `SecureString` named
 `/formforge/production/mongodb-uri`. The task execution role can read only
 parameters below `/formforge/production/`.
 
+Production Google-login credentials use the same encrypted boundary:
+
+- `/formforge/production/google-oauth-client-id`
+- `/formforge/production/google-oauth-client-secret`
+
+Facebook credentials are reserved in the same boundary but are not injected into
+production until Meta business verification and App Review are complete:
+
+- `/formforge/production/facebook-app-id`
+- `/formforge/production/facebook-app-secret`
+
+The production workflow injects only approved provider values as ECS task secrets. Keep
+the local and production provider clients separate when rotating credentials, and never
+store their values in repository or GitHub configuration. See
+`docs/FACEBOOK_LOGIN_ROLLOUT.md` before enabling Facebook in production.
+
 Pull request previews use a separate `SecureString` at
 `/formforge/preview/mongodb-uri`, a task execution role that cannot read
 production parameters, and a runtime role without SES permissions. Each PR

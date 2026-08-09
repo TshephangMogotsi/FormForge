@@ -110,8 +110,9 @@ control; `.env` is ignored. The default development endpoints are:
 - Readiness: `http://localhost:4000/api/health/ready`
 
 `CLIENT_ORIGIN` and `PUBLIC_APP_ORIGIN` should remain
-`http://localhost:5173` locally. Password-reset delivery is optional during
-development and requires a verified SES sender in `PASSWORD_RESET_FROM_EMAIL`.
+`http://localhost:5173` locally. Password-reset and email-verification delivery are
+optional during development and share the verified SES sender configured in
+`PASSWORD_RESET_FROM_EMAIL`.
 
 ## Test and build status
 

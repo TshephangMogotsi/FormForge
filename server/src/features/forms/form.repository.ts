@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { FormModel } from "./form.model.js";
+import { AbuseReportModel } from "./abuse-report.model.js";
 import { PublishedFormModel } from "./published-form.model.js";
 import type { FormField, SubmissionAnswer } from "./form.schemas.js";
 import { SubmissionModel } from "./submission.model.js";
@@ -85,6 +86,12 @@ export type OwnerAnalyticsCounts = {
 
 export interface FormRepository {
   create(input: CreateFormRecord): Promise<FormRecord>;
+  claimGuestDraft(
+    input: CreateFormRecord & { sourceGuestDraftId: string }
+  ): Promise<FormRecord>;
+  findByOwnerAndGuestDraftId(ownerId: string, sourceGuestDraftId: string): Promise<FormRecord | null>;
+  countByOwner(ownerId: string): Promise<number>;
+  countPublishedByOwner(ownerId: string): Promise<number>;
   listByOwner(ownerId: string, page: number, limit: number): Promise<FormPage>;
   findByOwnerAndId(ownerId: string, formId: string): Promise<FormRecord | null>;
   updateByOwnerAndId(
@@ -97,6 +104,13 @@ export interface FormRepository {
     publication: PublishedFormRecord;
   } | null>;
   findPublishedBySlug(slug: string): Promise<PublishedFormRecord | null>;
+  createAbuseReport(input: {
+    formId: string;
+    slug: string;
+    reason: "spam" | "phishing" | "harmful" | "other";
+    details: string;
+    reporterEmail: string | null;
+  }): Promise<{ id: string; createdAt: Date }>;
   createSubmission(input: {
     formId: string;
     formVersion: number;
@@ -178,6 +192,58 @@ export class MongooseFormRepository implements FormRepository {
   async create(input: CreateFormRecord): Promise<FormRecord> {
     const form = await FormModel.create(input);
     return toFormRecord(form);
+  }
+
+  async claimGuestDraft(
+    input: CreateFormRecord & { sourceGuestDraftId: string }
+  ): Promise<FormRecord> {
+    const { ownerId, sourceGuestDraftId, title, description, fields } = input;
+    const filter = { ownerId, sourceGuestDraftId };
+
+    try {
+      const form = await FormModel.findOneAndUpdate(
+        filter,
+        {
+          $setOnInsert: {
+            ownerId,
+            sourceGuestDraftId,
+            title,
+            description,
+            fields
+          }
+        },
+        {
+          upsert: true,
+          new: true,
+          runValidators: true,
+          setDefaultsOnInsert: true
+        }
+      ).exec();
+
+      if (!form) throw new Error("Guest draft claim did not return a form.");
+      return toFormRecord(form);
+    } catch (error) {
+      if ((error as { code?: number }).code !== 11000) throw error;
+      const existing = await FormModel.findOne(filter).exec();
+      if (!existing) throw error;
+      return toFormRecord(existing);
+    }
+  }
+
+  async findByOwnerAndGuestDraftId(
+    ownerId: string,
+    sourceGuestDraftId: string
+  ): Promise<FormRecord | null> {
+    const form = await FormModel.findOne({ ownerId, sourceGuestDraftId }).exec();
+    return form ? toFormRecord(form) : null;
+  }
+
+  countByOwner(ownerId: string): Promise<number> {
+    return FormModel.countDocuments({ ownerId }).exec();
+  }
+
+  countPublishedByOwner(ownerId: string): Promise<number> {
+    return FormModel.countDocuments({ ownerId, status: "published" }).exec();
   }
 
   async listByOwner(ownerId: string, page: number, limit: number): Promise<FormPage> {
@@ -278,6 +344,17 @@ export class MongooseFormRepository implements FormRepository {
     }).exec();
 
     return snapshot ? toPublishedFormRecord(snapshot, form.slug) : null;
+  }
+
+  async createAbuseReport(input: {
+    formId: string;
+    slug: string;
+    reason: "spam" | "phishing" | "harmful" | "other";
+    details: string;
+    reporterEmail: string | null;
+  }): Promise<{ id: string; createdAt: Date }> {
+    const report = await AbuseReportModel.create(input);
+    return { id: report.id, createdAt: report.createdAt };
   }
 
   async createSubmission(input: {

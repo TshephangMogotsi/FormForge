@@ -72,12 +72,18 @@ jobs:
               {"name":"PORT","value":"4000"},
               {"name":"SESSION_TTL_HOURS","value":"12"},
               {"name":"PASSWORD_RESET_TTL_MINUTES","value":"30"},
+              {"name":"EMAIL_VERIFICATION_TTL_MINUTES","value":"60"},
+              {"name":"REQUIRE_TRANSACTIONAL_EMAIL","value":"true"},
+              {"name":"TRIAL_MAX_FORMS_PER_ACCOUNT","value":"25"},
+              {"name":"TRIAL_MAX_PUBLISHED_FORMS_PER_ACCOUNT","value":"5"},
               {"name":"PUBLIC_APP_ORIGIN","value":"${{ vars.PUBLIC_APP_ORIGIN }}"}
             ]
           secrets: |
             [
               {"name":"MONGODB_URI","valueFrom":"/formforge/production/mongodb-uri"},
-              {"name":"PASSWORD_RESET_FROM_EMAIL","valueFrom":"/formforge/production/password-reset-from-email"}
+              {"name":"PASSWORD_RESET_FROM_EMAIL","valueFrom":"/formforge/production/password-reset-from-email"},
+              {"name":"GOOGLE_OAUTH_CLIENT_ID","valueFrom":"/formforge/production/google-oauth-client-id"},
+              {"name":"GOOGLE_OAUTH_CLIENT_SECRET","valueFrom":"/formforge/production/google-oauth-client-secret"}
             ]
           cpu: "256"
           memory: "512"

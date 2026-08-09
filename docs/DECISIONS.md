@@ -246,3 +246,73 @@ to `readWrite` on the `formforge` database and production cluster, and the docum
 broad public access-list entry. Preview remains isolated in its own Atlas project and
 M0 cluster with a distinct credential; its broader database role is accepted only
 inside that non-production boundary because PR databases are named dynamically.
+
+## ADR-024: Keep pre-authentication drafts in the browser
+
+FormForge lets signed-out visitors use the builder before asking them to create an
+account. The initial guest implementation stores one bounded, versioned draft in
+browser storage and creates no anonymous user, session, form, or submission record on
+the server. Account-owned actions such as cloud persistence, publication, responses,
+analytics, integrations, uploads, and metered providers remain authenticated.
+
+After authentication, the client sends the complete guest draft with a stable
+idempotency identifier to the existing modular API boundary. The server validates it,
+assigns ownership, and returns the canonical form before the client removes local data
+or resumes publication. Only the `save` or `publish` intent is retained in React state;
+form content is never placed in a URL. After claim, the canonical owner edit URL replaces
+the guest route. An expired owned session is recovered in place and only resumes after
+the same owner authenticates. Authentication tokens remain in HTTP-only cookies and
+never enter browser draft storage.
+
+Server-side anonymous accounts were rejected for the first public trial because they
+would create bot-accessible writes, abandoned database records, retention work, and
+account-linking complexity before the product needs cross-device guest drafts. Storing
+only transient React state was rejected because refreshes and authentication failures
+would destroy work at the highest-value conversion point.
+
+## ADR-025: Gate public hosting with verified identity and bounded trial limits
+
+Guest editing and account draft persistence remain friction-light, but the API requires
+a verified email before any publication. Verification uses a separate hashed,
+single-use, expiring token lifecycle with resend and authenticated email correction.
+Publication requests, verification operations, public submissions, and abuse reports
+have distinct rate limits. The initial trial defaults to 25 forms and 5 distinct live
+forms per account, while allowing updates to an existing live form.
+
+Default CAPTCHA was rejected because it adds accessibility and conversion cost before
+measured abuse justifies it. Allowing unverified publication was rejected because it
+would let disposable automated accounts silently host phishing or spam. The account
+caps use owner-scoped count-before-write checks; this is intentionally documented as a
+single-task trial boundary rather than a globally exact distributed quota.
+
+## ADR-026: Use bounded first-party telemetry for the guest acquisition trial
+
+FormForge records the guest-to-publication funnel through a same-origin API and a
+strict event schema. The contract permits only the event name, occurrence time, random
+anonymous/session correlation, sanitized source campaign, device class, and a bounded
+failure category. It deliberately has no generic metadata field and rejects form
+content, account identifiers, respondent data, and unknown properties. Records expire
+after 90 days, and the operator report exposes aggregate counts and conversion only.
+
+A paid analytics vendor was rejected for the initial trial because the small event set
+does not justify another processor, SDK, consent boundary, or recurring cost. Request
+logs alone were rejected because they cannot distinguish meaningful editing or resumed
+intent. The current event and API limits reduce simple pollution but do not make the
+analytics globally exact or bot-proof; trial decisions must account for that limitation.
+
+## ADR-027: Adapt social identity into the existing opaque-session boundary
+
+Google and Facebook login use server-side authorization-code adapters and then issue the
+same revocable FormForge session as password login. The browser receives no provider
+token. Short-lived HTTP-only state cookies protect both callbacks; Google additionally
+uses PKCE, nonce, verified ID-token audience, issuer, signature, and email claims. Only
+the minimal identity scopes are requested, external calls have bounded timeouts, and no
+refresh or access token is retained.
+
+Provider subjects are stored as stable identity keys. A Google identity may link by its
+verified email. Facebook does not expose an equivalent verified-email claim in this flow,
+so automatic linking to an existing email is rejected; a new Facebook-backed account must
+complete FormForge email verification before publishing. Client-only implicit tokens and
+blind email linking were rejected because they weaken the existing session and ownership
+boundaries. A hosted authentication platform was not introduced because two providers do
+not yet justify another paid dependency or migration of the established user/session model.

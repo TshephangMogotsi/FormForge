@@ -16,7 +16,7 @@ const newPasswordSchema = z
 
 export const registerSchema = z
   .object({
-    name: z.string().trim().min(2).max(80),
+    name: z.string().trim().min(2).max(80).optional(),
     email: emailSchema,
     password: newPasswordSchema,
     confirmPassword: z.string().max(72)
@@ -52,7 +52,22 @@ export const resetPasswordSchema = z
     message: "Passwords do not match."
   });
 
+export const verifyEmailSchema = z
+  .object({
+    token: z.string().min(32).max(256)
+  })
+  .strict();
+
+export const changeEmailSchema = z
+  .object({
+    email: emailSchema,
+    password: z.string().min(1).max(72)
+  })
+  .strict();
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
+export type ChangeEmailInput = z.infer<typeof changeEmailSchema>;

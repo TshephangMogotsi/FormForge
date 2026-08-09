@@ -4,7 +4,11 @@ import {
   createRateLimiter,
   rateLimitPolicies
 } from "../../middleware/rate-limit.js";
-import { createSubmissionSchema, publicFormSlugSchema } from "./form.schemas.js";
+import {
+  abuseReportSchema,
+  createSubmissionSchema,
+  publicFormSlugSchema
+} from "./form.schemas.js";
 import type { FormService } from "./form.service.js";
 
 export function createPublicFormRouter(formService: FormService) {
@@ -34,6 +38,19 @@ export function createPublicFormRouter(formService: FormService) {
             submittedAt: submission.createdAt
           }
         }
+      });
+    })
+  );
+
+  router.post(
+    "/:slug/reports",
+    createRateLimiter(rateLimitPolicies.abuseReports),
+    asyncHandler(async (request, response) => {
+      const slug = publicFormSlugSchema.parse(request.params.slug);
+      const input = abuseReportSchema.parse(request.body);
+      const report = await formService.reportAbuse(slug, input);
+      response.status(201).json({
+        data: { report: { id: report.id, submittedAt: report.createdAt } }
       });
     })
   );

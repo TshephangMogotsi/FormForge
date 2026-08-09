@@ -6,6 +6,8 @@ Enable a user to create a dynamic form, publish it, collect submissions, and rev
 
 ## MVP
 
+- Guest-first form building without an account.
+- One browser-persisted guest draft with clear local-only status.
 - Email and password authentication.
 - Personal forms dashboard.
 - Create, rename, duplicate, and delete forms.
@@ -14,11 +16,16 @@ Enable a user to create a dynamic form, publish it, collect submissions, and rev
 - Field labels, descriptions, placeholders, options, and required state.
 - Draft autosave and preview.
 - Explicit publishing with a public slug.
+- Contextual authentication that claims a guest draft and resumes publication.
+- Email verification before first public publication.
+- Public-trial account caps, acceptable-use guidance, and abuse reporting.
 - Server-validated public submissions.
 - Paginated response table and basic analytics.
 
 ## Non-goals
 
+- Server-stored anonymous users or anonymous form records.
+- Multiple guest drafts or cross-device guest synchronization.
 - Payments.
 - File uploads.
 - Team collaboration.
@@ -44,4 +51,7 @@ Enable a user to create a dynamic form, publish it, collect submissions, and rev
 
 ## Definition of done
 
-A demo user can create and configure a form, publish it, submit a public response, and see that response appear in the owner dashboard.
+A visitor can create and configure a local guest form without authenticating. When the
+visitor chooses to publish, FormForge can authenticate them, claim the draft without
+loss or duplication, publish it, accept a public response, and show that response in
+the owner dashboard.

@@ -62,6 +62,24 @@
 - [x] Add a rollback-aware deployment workflow.
 - [x] Add an operational runbook.
 
+## Phase 7 — Guest-first acquisition
+
+- [x] Define the guest capability boundary, phased delivery plan, and success criteria.
+- [x] Extract the shared draft contract and versioned browser storage.
+- [x] Add stable application routes and a public guest-builder entry point.
+- [x] Add local-only autosave, recovery, and start-over behavior.
+- [x] Add contextual registration and login without leaving the builder.
+- [x] Claim guest drafts idempotently through the authenticated API.
+- [x] Resume save or publish intent after authentication.
+- [x] Add first-publication trust and abuse controls.
+- [x] Add privacy-safe funnel measurement and local launch verification.
+- [ ] Configure transactional email and record the approved public-trial rollout and rollback evidence.
+- [x] Add optional Google and Facebook login without breaking guest-intent recovery.
+- [ ] Complete the deferred Facebook business verification and public callback check;
+  Google credentials and its production callback are configured for the initial rollout.
+
+Detailed sequencing and exit criteria are in `docs/GUEST_BUILDER_PLAN.md`.
+
 ## Optional differentiator after the core is complete
 
 - [ ] Add AI-assisted form generation behind a provider-neutral interface.

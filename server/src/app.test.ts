@@ -3,6 +3,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app.js";
 import { AuthService } from "./features/auth/auth.service.js";
 import type {
+  EmailVerificationNotification,
+  EmailVerificationNotifier
+} from "./features/auth/email-verification.notifier.js";
+import type {
+  EmailVerificationRecord,
+  EmailVerificationRepository
+} from "./features/auth/email-verification.repository.js";
+import { EmailVerificationService } from "./features/auth/email-verification.service.js";
+import type {
   PasswordResetNotification,
   PasswordResetNotifier
 } from "./features/auth/password-reset.notifier.js";
@@ -35,15 +44,49 @@ import type {
 } from "./features/forms/form.repository.js";
 import type { SubmissionAnswer } from "./features/forms/form.schemas.js";
 import { FormService } from "./features/forms/form.service.js";
+import type { FunnelRepository } from "./features/funnel/funnel.repository.js";
+import type { FunnelEventInput } from "./features/funnel/funnel.schemas.js";
+import { FunnelService } from "./features/funnel/funnel.service.js";
+import type {
+  SocialAuthorizationInput,
+  SocialCodeInput,
+  SocialOAuthProvider,
+  SocialProfile
+} from "./features/auth/social-oauth.provider.js";
+
+class FakeSocialOAuthProvider implements SocialOAuthProvider {
+  lastCodeInput: SocialCodeInput | null = null;
+
+  constructor(
+    readonly name: "google" | "facebook",
+    private readonly profile: SocialProfile
+  ) {}
+
+  authorizationUrl(input: SocialAuthorizationInput): string {
+    return `https://identity.example/${this.name}?state=${encodeURIComponent(input.state)}`;
+  }
+
+  async exchangeCode(input: SocialCodeInput): Promise<SocialProfile> {
+    this.lastCodeInput = input;
+    return this.profile;
+  }
+}
 
 class InMemoryUserRepository implements UserRepository {
   private readonly users = new Map<string, UserRecord>();
   private nextId = 1;
 
+  constructor(private readonly verifiedByDefault = true) {}
+
   async create(input: CreateUserRecord): Promise<UserRecord> {
     const now = new Date();
     const user: UserRecord = {
       ...input,
+      emailVerifiedAt: "emailVerifiedAt" in input
+        ? input.emailVerifiedAt ?? null
+        : this.verifiedByDefault ? new Date() : null,
+      googleSubject: input.googleSubject ?? null,
+      facebookSubject: input.facebookSubject ?? null,
       id: this.nextId.toString(16).padStart(24, "0"),
       createdAt: now,
       updatedAt: now
@@ -61,6 +104,33 @@ class InMemoryUserRepository implements UserRepository {
     return this.users.get(userId) ?? null;
   }
 
+  async findBySocialIdentity(
+    provider: "google" | "facebook",
+    subject: string
+  ): Promise<UserRecord | null> {
+    const field = provider === "google" ? "googleSubject" : "facebookSubject";
+    return [...this.users.values()].find((user) => user[field] === subject) ?? null;
+  }
+
+  async linkSocialIdentity(
+    userId: string,
+    provider: "google" | "facebook",
+    subject: string,
+    verifiedAt: Date | null
+  ): Promise<UserRecord | null> {
+    const user = this.users.get(userId);
+    if (!user) return null;
+    const field = provider === "google" ? "googleSubject" : "facebookSubject";
+    const updated = {
+      ...user,
+      [field]: subject,
+      emailVerifiedAt: verifiedAt ?? user.emailVerifiedAt,
+      updatedAt: new Date()
+    };
+    this.users.set(userId, updated);
+    return updated;
+  }
+
   async updatePasswordHash(userId: string, passwordHash: string): Promise<boolean> {
     const user = this.users.get(userId);
     if (!user) return false;
@@ -71,6 +141,22 @@ class InMemoryUserRepository implements UserRepository {
       updatedAt: new Date()
     });
     return true;
+  }
+
+  async markEmailVerified(userId: string, verifiedAt: Date): Promise<UserRecord | null> {
+    const user = this.users.get(userId);
+    if (!user) return null;
+    const updated = { ...user, emailVerifiedAt: verifiedAt, updatedAt: new Date() };
+    this.users.set(userId, updated);
+    return updated;
+  }
+
+  async updateEmail(userId: string, email: string): Promise<UserRecord | null> {
+    const user = this.users.get(userId);
+    if (!user) return null;
+    const updated = { ...user, email, emailVerifiedAt: null, updatedAt: new Date() };
+    this.users.set(userId, updated);
+    return updated;
   }
 }
 
@@ -125,12 +211,51 @@ class CapturingPasswordResetNotifier implements PasswordResetNotifier {
   }
 }
 
+class InMemoryEmailVerificationRepository implements EmailVerificationRepository {
+  private readonly verifications = new Map<string, EmailVerificationRecord>();
+
+  async replaceForUser(record: EmailVerificationRecord): Promise<void> {
+    this.verifications.set(record.userId, record);
+  }
+
+  async consumeValidToken(tokenHash: string, now: Date): Promise<string | null> {
+    const verification = [...this.verifications.values()].find(
+      (candidate) => candidate.tokenHash === tokenHash && candidate.expiresAt > now
+    );
+    if (!verification) return null;
+    this.verifications.delete(verification.userId);
+    return verification.userId;
+  }
+
+  async deleteForUser(userId: string): Promise<void> {
+    this.verifications.delete(userId);
+  }
+}
+
+class CapturingEmailVerificationNotifier implements EmailVerificationNotifier {
+  latestNotification: EmailVerificationNotification | null = null;
+
+  async send(notification: EmailVerificationNotification): Promise<void> {
+    this.latestNotification = notification;
+  }
+}
+
+class InMemoryFunnelRepository implements FunnelRepository {
+  readonly events: Array<FunnelEventInput & { expiresAt: Date }> = [];
+
+  async create(input: FunnelEventInput, expiresAt: Date): Promise<void> {
+    this.events.push({ ...input, expiresAt });
+  }
+}
+
 class InMemoryFormRepository implements FormRepository {
   private readonly forms = new Map<string, FormRecord>();
+  private readonly guestClaims = new Map<string, string>();
   private readonly publications = new Map<string, PublishedFormRecord[]>();
   private submissions: SubmissionRecord[] = [];
   private nextId = 100;
   private nextSubmissionId = 1000;
+  private nextReportId = 2000;
 
   async create(input: CreateFormRecord): Promise<FormRecord> {
     const now = new Date();
@@ -147,6 +272,36 @@ class InMemoryFormRepository implements FormRepository {
     this.nextId += 1;
     this.forms.set(form.id, form);
     return form;
+  }
+
+  async claimGuestDraft(
+    input: CreateFormRecord & { sourceGuestDraftId: string }
+  ): Promise<FormRecord> {
+    const claimKey = `${input.ownerId}:${input.sourceGuestDraftId}`;
+    const existingFormId = this.guestClaims.get(claimKey);
+    if (existingFormId) return this.forms.get(existingFormId)!;
+
+    const form = await this.create(input);
+    this.guestClaims.set(claimKey, form.id);
+    return form;
+  }
+
+  async findByOwnerAndGuestDraftId(
+    ownerId: string,
+    sourceGuestDraftId: string
+  ): Promise<FormRecord | null> {
+    const formId = this.guestClaims.get(`${ownerId}:${sourceGuestDraftId}`);
+    return formId ? this.forms.get(formId) ?? null : null;
+  }
+
+  async countByOwner(ownerId: string): Promise<number> {
+    return [...this.forms.values()].filter((form) => form.ownerId === ownerId).length;
+  }
+
+  async countPublishedByOwner(ownerId: string): Promise<number> {
+    return [...this.forms.values()].filter(
+      (form) => form.ownerId === ownerId && form.status === "published"
+    ).length;
   }
 
   async listByOwner(ownerId: string, page: number, limit: number): Promise<FormPage> {
@@ -235,6 +390,15 @@ class InMemoryFormRepository implements FormRepository {
         .get(form.id)
         ?.find((publication) => publication.version === form.publishedVersion) ?? null
     );
+  }
+
+  async createAbuseReport(): Promise<{ id: string; createdAt: Date }> {
+    const report = {
+      id: this.nextReportId.toString(16).padStart(24, "0"),
+      createdAt: new Date()
+    };
+    this.nextReportId += 1;
+    return report;
   }
 
   async createSubmission(input: {
@@ -351,11 +515,18 @@ class InMemoryFormRepository implements FormRepository {
 }
 
 function createTestApp(
-  options?: Parameters<typeof createApp>[1]
+  options?: Parameters<typeof createApp>[1],
+  testOptions: {
+    verifiedByDefault?: boolean;
+    formLimits?: { maxFormsPerOwner: number; maxPublishedFormsPerOwner: number };
+    socialOAuthProviders?: SocialOAuthProvider[];
+  } = {}
 ) {
-  const users = new InMemoryUserRepository();
+  const users = new InMemoryUserRepository(testOptions.verifiedByDefault ?? true);
   const forms = new InMemoryFormRepository();
   const notifier = new CapturingPasswordResetNotifier();
+  const verificationNotifier = new CapturingEmailVerificationNotifier();
+  const funnelRepository = new InMemoryFunnelRepository();
   const auth = new AuthService(
     users,
     new SessionService(new InMemorySessionRepository()),
@@ -365,6 +536,12 @@ function createTestApp(
       "https://formforge.example",
       30
     ),
+    new EmailVerificationService(
+      new InMemoryEmailVerificationRepository(),
+      verificationNotifier,
+      "https://formforge.example",
+      60
+    ),
     4
   );
 
@@ -372,21 +549,25 @@ function createTestApp(
     app: createApp(
       {
         auth,
-        forms: new FormService(forms)
+        forms: new FormService(forms, testOptions.formLimits),
+        funnel: new FunnelService(funnelRepository),
+        socialOAuthProviders: testOptions.socialOAuthProviders ?? []
       },
       options
     ),
-    notifier
+    notifier,
+    verificationNotifier,
+    funnelRepository
   };
 }
 
 async function register(
   agent: ReturnType<typeof request.agent>,
   email: string,
-  name = "Test User"
+  name?: string
 ) {
   return agent.post("/api/v1/auth/register").send({
-    name,
+    ...(name ? { name } : {}),
     email,
     password: "correct-horse-42",
     confirmPassword: "correct-horse-42"
@@ -464,6 +645,33 @@ describe("FormForge API", () => {
     });
   });
 
+  it("records only the bounded privacy-safe funnel event contract", async () => {
+    const setup = createTestApp();
+    const event = {
+      name: "publish_selected",
+      occurredAt: "2026-08-09T09:00:00.000Z",
+      anonymousId: "b3b2c1d0-7a6f-4f52-91af-2f2a5cf56e21",
+      sessionId: "70b39b40-5fe6-4181-bd80-83f2739010d3",
+      sourceCampaign: "public_trial",
+      deviceClass: "mobile",
+      failureCategory: null
+    };
+    const accepted = await request(setup.app).post("/api/v1/events").send(event);
+    expect(accepted.status).toBe(202);
+    expect(accepted.body).toEqual({});
+    expect(setup.funnelRepository.events[0]).toMatchObject(event);
+    expect(setup.funnelRepository.events[0]!.expiresAt.getTime()).toBeGreaterThan(Date.now());
+
+    const contentLeak = await request(setup.app).post("/api/v1/events").send({
+      ...event,
+      formTitle: "Do not collect this",
+      email: "owner@example.com"
+    });
+    expect(contentLeak.status).toBe(400);
+    expect(contentLeak.body.error.code).toBe("VALIDATION_ERROR");
+    expect(setup.funnelRepository.events).toHaveLength(1);
+  });
+
   it("does not emit cross-origin permissions when production CORS is disabled", async () => {
     const response = await request(createTestApp({ corsOrigin: false }).app)
       .options("/api/health")
@@ -475,13 +683,13 @@ describe("FormForge API", () => {
 
   it("registers a user with a protected cookie and returns the current user", async () => {
     const agent = request.agent(app);
-    const registration = await register(agent, "owner@example.com", "Form Owner");
+    const registration = await register(agent, "owner@example.com");
 
     expect(registration.status).toBe(201);
     expect(registration.headers["set-cookie"]?.[0]).toContain("HttpOnly");
     expect(registration.headers["set-cookie"]?.[0]).toContain("SameSite=Lax");
     expect(registration.body.data.user).toMatchObject({
-      name: "Form Owner",
+      name: "FormForge User",
       email: "owner@example.com"
     });
     expect(registration.body.data.user).not.toHaveProperty("passwordHash");
@@ -489,6 +697,191 @@ describe("FormForge API", () => {
     const currentUser = await agent.get("/api/v1/auth/me");
     expect(currentUser.status).toBe(200);
     expect(currentUser.body.data.user.email).toBe("owner@example.com");
+  });
+
+  it("completes Google OAuth with state, PKCE, verified email, and the normal session cookie", async () => {
+    const google = new FakeSocialOAuthProvider("google", {
+      provider: "google",
+      subject: "google-subject-1",
+      email: "google.user@example.com",
+      emailVerified: true,
+      name: "Google User"
+    });
+    const setup = createTestApp(undefined, { socialOAuthProviders: [google] });
+    const agent = request.agent(setup.app);
+
+    const providers = await agent.get("/api/v1/auth/providers");
+    expect(providers.body.data.providers).toEqual({ google: true, facebook: false });
+    const started = await agent
+      .get("/api/v1/auth/google")
+      .query({ returnTo: "/build/new?resume=publish" });
+    expect(started.status).toBe(302);
+    const state = new URL(started.headers.location).searchParams.get("state");
+    expect(state).toEqual(expect.any(String));
+
+    const completed = await agent
+      .get("/api/v1/auth/google/callback")
+      .query({ code: "one-time-code", state });
+    expect(completed.status).toBe(303);
+    expect(completed.headers.location).toBe("/build/new?resume=publish");
+    expect(completed.headers["set-cookie"]?.join(";")).toContain("formforge_session=");
+    expect(google.lastCodeInput).toMatchObject({ code: "one-time-code" });
+    expect(google.lastCodeInput!.nonce.length).toBeGreaterThan(20);
+    expect(google.lastCodeInput!.codeVerifier.length).toBeGreaterThan(40);
+
+    const currentUser = await agent.get("/api/v1/auth/me");
+    expect(currentUser.body.data.user).toMatchObject({
+      email: "google.user@example.com",
+      emailVerifiedAt: expect.any(String),
+      name: "Google User"
+    });
+  });
+
+  it("creates an unverified Facebook account without silently linking an existing email", async () => {
+    const facebook = new FakeSocialOAuthProvider("facebook", {
+      provider: "facebook",
+      subject: "facebook-subject-1",
+      email: "facebook.user@example.com",
+      emailVerified: false,
+      name: "Facebook User"
+    });
+    const setup = createTestApp(undefined, {
+      verifiedByDefault: false,
+      socialOAuthProviders: [facebook]
+    });
+    const agent = request.agent(setup.app);
+    const started = await agent.get("/api/v1/auth/facebook");
+    const state = new URL(started.headers.location).searchParams.get("state");
+    const completed = await agent
+      .get("/api/v1/auth/facebook/callback")
+      .query({ code: "facebook-code", state });
+    expect(completed.status).toBe(303);
+    expect((await agent.get("/api/v1/auth/me")).body.data.user).toMatchObject({
+      email: "facebook.user@example.com",
+      emailVerifiedAt: null
+    });
+    expect(setup.verificationNotifier.latestNotification?.recipientEmail).toBe(
+      "facebook.user@example.com"
+    );
+
+    const conflictingFacebook = new FakeSocialOAuthProvider("facebook", {
+      provider: "facebook",
+      subject: "facebook-subject-2",
+      email: "existing@example.com",
+      emailVerified: false,
+      name: "Different Facebook User"
+    });
+    const conflictSetup = createTestApp(undefined, {
+      verifiedByDefault: false,
+      socialOAuthProviders: [conflictingFacebook]
+    });
+    await register(request.agent(conflictSetup.app), "existing@example.com");
+    const conflictAgent = request.agent(conflictSetup.app);
+    const conflictStart = await conflictAgent.get("/api/v1/auth/facebook");
+    const conflictState = new URL(conflictStart.headers.location).searchParams.get("state");
+    const conflict = await conflictAgent
+      .get("/api/v1/auth/facebook/callback")
+      .query({ code: "facebook-code", state: conflictState });
+    expect(conflict.status).toBe(303);
+    expect(conflict.headers.location).toBe("/dashboard?oauthError=social_email_conflict");
+    expect((await conflictAgent.get("/api/v1/auth/me")).status).toBe(401);
+  });
+
+  it("rejects a social OAuth callback whose state does not match its HTTP-only cookie", async () => {
+    const google = new FakeSocialOAuthProvider("google", {
+      provider: "google",
+      subject: "google-subject-2",
+      email: "safe@example.com",
+      emailVerified: true,
+      name: "Safe User"
+    });
+    const setup = createTestApp(undefined, { socialOAuthProviders: [google] });
+    const agent = request.agent(setup.app);
+    await agent.get("/api/v1/auth/google");
+    const rejected = await agent
+      .get("/api/v1/auth/google/callback")
+      .query({ code: "attacker-code", state: "x".repeat(32) });
+    expect(rejected.status).toBe(400);
+    expect(rejected.body.error.code).toBe("INVALID_OAUTH_STATE");
+    expect(google.lastCodeInput).toBeNull();
+  });
+
+  it("requires single-use email verification before first publication", async () => {
+    const setup = createTestApp(undefined, { verifiedByDefault: false });
+    const agent = request.agent(setup.app);
+    const registration = await register(agent, "owner@example.com", "Form Owner");
+    expect(registration.body.data.user.emailVerifiedAt).toBeNull();
+    expect(setup.verificationNotifier.latestNotification).toMatchObject({
+      recipientEmail: "owner@example.com",
+      expiresInMinutes: 60
+    });
+
+    const creation = await agent.post("/api/v1/forms").send({
+      title: "Verified publication",
+      fields: [{
+        id: "b3b2c1d0-7a6f-4f52-91af-2f2a5cf56e21",
+        type: "shortText",
+        label: "Your name",
+        description: "",
+        placeholder: "",
+        required: true,
+        options: []
+      }]
+    });
+    const formId = creation.body.data.form.id as string;
+    const blocked = await agent.post(`/api/v1/forms/${formId}/publish`);
+    expect(blocked.status).toBe(403);
+    expect(blocked.body.error.code).toBe("EMAIL_VERIFICATION_REQUIRED");
+
+    const verificationUrl = setup.verificationNotifier.latestNotification!.verificationUrl;
+    const token = new URL(verificationUrl).searchParams.get("token")!;
+    const verified = await agent.post("/api/v1/auth/verify-email").send({ token });
+    expect(verified.status).toBe(200);
+    expect(verified.body.data.verified).toBe(true);
+    expect((await agent.post(`/api/v1/forms/${formId}/publish`)).status).toBe(201);
+
+    const replay = await agent.post("/api/v1/auth/verify-email").send({ token });
+    expect(replay.status).toBe(400);
+    expect(replay.body.error.code).toBe("INVALID_VERIFICATION_TOKEN");
+    const alreadyVerified = await agent.post("/api/v1/auth/email-verification");
+    expect(alreadyVerified.status).toBe(200);
+    expect(alreadyVerified.body.data.message).toBe("Your email is already verified.");
+  });
+
+  it("replaces expired verification links and safely changes an unverified email", async () => {
+    const setup = createTestApp(undefined, { verifiedByDefault: false });
+    const agent = request.agent(setup.app);
+    await register(agent, "owner@example.com", "Form Owner");
+    const firstToken = new URL(
+      setup.verificationNotifier.latestNotification!.verificationUrl
+    ).searchParams.get("token")!;
+
+    const resent = await agent.post("/api/v1/auth/email-verification");
+    expect(resent.status).toBe(202);
+    const secondToken = new URL(
+      setup.verificationNotifier.latestNotification!.verificationUrl
+    ).searchParams.get("token")!;
+    expect(secondToken).not.toBe(firstToken);
+    expect((await agent.post("/api/v1/auth/verify-email").send({ token: firstToken })).status).toBe(400);
+
+    const wrongPassword = await agent.patch("/api/v1/auth/email").send({
+      email: "corrected@example.com",
+      password: "wrong-password"
+    });
+    expect(wrongPassword.status).toBe(401);
+    const changed = await agent.patch("/api/v1/auth/email").send({
+      email: "corrected@example.com",
+      password: "correct-horse-42"
+    });
+    expect(changed.status).toBe(200);
+    expect(changed.body.data.user).toMatchObject({
+      email: "corrected@example.com",
+      emailVerifiedAt: null
+    });
+    expect(setup.verificationNotifier.latestNotification!.recipientEmail).toBe(
+      "corrected@example.com"
+    );
+    expect((await agent.post("/api/v1/auth/verify-email").send({ token: secondToken })).status).toBe(400);
   });
 
   it("validates registration input and does not expose the password", async () => {
@@ -656,6 +1049,9 @@ describe("FormForge API", () => {
     const duplication = await request(app).post(
       "/api/v1/forms/000000000000000000000001/duplicate"
     );
+    const claim = await request(app)
+      .put("/api/v1/forms/claims/b3b2c1d0-7a6f-4f52-91af-2f2a5cf56e21")
+      .send({ title: "Guest form" });
 
     expect(response.status).toBe(401);
     expect(response.body.error.code).toBe("UNAUTHENTICATED");
@@ -663,6 +1059,90 @@ describe("FormForge API", () => {
     expect(analytics.body.error.code).toBe("UNAUTHENTICATED");
     expect(duplication.status).toBe(401);
     expect(duplication.body.error.code).toBe("UNAUTHENTICATED");
+    expect(claim.status).toBe(401);
+    expect(claim.body.error.code).toBe("UNAUTHENTICATED");
+  });
+
+  it("claims a validated guest draft exactly once per owner", async () => {
+    const owner = request.agent(app);
+    const otherOwner = request.agent(app);
+    await register(owner, "owner@example.com");
+    await register(otherOwner, "other@example.com", "Other Owner");
+    const guestDraftId = "b3b2c1d0-7a6f-4f52-91af-2f2a5cf56e21";
+    const draft = {
+      title: "Volunteer signup",
+      description: "A guest-created draft.",
+      fields: [
+        {
+          id: "70b39b40-5fe6-4181-bd80-83f2739010d3",
+          type: "shortText",
+          label: "What is your name?",
+          description: "",
+          placeholder: "Your name",
+          required: true,
+          options: []
+        }
+      ]
+    };
+
+    const firstClaim = await owner
+      .put(`/api/v1/forms/claims/${guestDraftId}`)
+      .send(draft);
+    const retriedClaim = await owner
+      .put(`/api/v1/forms/claims/${guestDraftId}`)
+      .send({ ...draft, title: "A retry must not overwrite the original" });
+    const otherOwnerClaim = await otherOwner
+      .put(`/api/v1/forms/claims/${guestDraftId}`)
+      .send(draft);
+
+    expect(firstClaim.status).toBe(200);
+    expect(firstClaim.body.data.form).toMatchObject({
+      title: "Volunteer signup",
+      description: "A guest-created draft.",
+      status: "draft",
+      fields: [expect.objectContaining({ id: draft.fields[0].id })]
+    });
+    expect(retriedClaim.status).toBe(200);
+    expect(retriedClaim.body.data.form.id).toBe(firstClaim.body.data.form.id);
+    expect(retriedClaim.body.data.form.title).toBe("Volunteer signup");
+    expect((await owner.get("/api/v1/forms")).body.data.pagination.total).toBe(1);
+
+    expect(otherOwnerClaim.status).toBe(200);
+    expect(otherOwnerClaim.body.data.form.id).not.toBe(firstClaim.body.data.form.id);
+    expect(otherOwnerClaim.body.data.form.ownerId).not.toBe(
+      firstClaim.body.data.form.ownerId
+    );
+  });
+
+  it("rejects malformed guest claim identifiers and draft fields", async () => {
+    const owner = request.agent(app);
+    await register(owner, "owner@example.com");
+
+    const invalidId = await owner
+      .put("/api/v1/forms/claims/not-a-uuid")
+      .send({ title: "Guest form" });
+    const invalidDraft = await owner
+      .put("/api/v1/forms/claims/b3b2c1d0-7a6f-4f52-91af-2f2a5cf56e21")
+      .send({
+        title: "Guest form",
+        fields: [
+          {
+            id: "not-a-uuid",
+            type: "shortText",
+            label: "Question",
+            description: "",
+            placeholder: "",
+            required: false,
+            options: []
+          }
+        ]
+      });
+
+    expect(invalidId.status).toBe(400);
+    expect(invalidId.body.error.code).toBe("VALIDATION_ERROR");
+    expect(invalidDraft.status).toBe(400);
+    expect(invalidDraft.body.error.code).toBe("VALIDATION_ERROR");
+    expect((await owner.get("/api/v1/forms")).body.data.pagination.total).toBe(0);
   });
 
   it("rejects pagination limits above the documented maximum", async () => {
@@ -680,6 +1160,76 @@ describe("FormForge API", () => {
       path: "limit",
       message: "Too big: expected number to be <=50"
     });
+  });
+
+  it("enforces public-trial form and published-form limits without breaking claim retries", async () => {
+    const limitedApp = createTestApp(undefined, {
+      formLimits: { maxFormsPerOwner: 2, maxPublishedFormsPerOwner: 1 }
+    }).app;
+    const owner = request.agent(limitedApp);
+    await register(owner, "limited@example.com");
+    const draft = {
+      title: "Guest claim",
+      description: "",
+      fields: [{
+        id: "b3b2c1d0-7a6f-4f52-91af-2f2a5cf56e21",
+        type: "shortText",
+        label: "Your name",
+        description: "",
+        placeholder: "",
+        required: true,
+        options: []
+      }]
+    };
+    const guestDraftId = "4a73a448-4fcc-4a9e-9cb1-c7ff2c735baa";
+    const claim = await owner.put(`/api/v1/forms/claims/${guestDraftId}`).send(draft);
+    const claimedFormId = claim.body.data.form.id as string;
+    const second = await owner.post("/api/v1/forms").send({ ...draft, title: "Second form" });
+
+    const retry = await owner.put(`/api/v1/forms/claims/${guestDraftId}`).send({
+      ...draft,
+      title: "A retry must not overwrite"
+    });
+    expect(retry.status).toBe(200);
+    expect(retry.body.data.form.id).toBe(claimedFormId);
+    expect(retry.body.data.form.title).toBe("Guest claim");
+
+    const overFormLimit = await owner.post("/api/v1/forms").send({ title: "Third form" });
+    expect(overFormLimit.status).toBe(403);
+    expect(overFormLimit.body.error.code).toBe("ACCOUNT_FORM_LIMIT_REACHED");
+
+    expect((await owner.post(`/api/v1/forms/${claimedFormId}/publish`)).status).toBe(201);
+    const overPublicationLimit = await owner.post(
+      `/api/v1/forms/${second.body.data.form.id}/publish`
+    );
+    expect(overPublicationLimit.status).toBe(403);
+    expect(overPublicationLimit.body.error.code).toBe("ACCOUNT_PUBLICATION_LIMIT_REACHED");
+    expect((await owner.post(`/api/v1/forms/${claimedFormId}/publish`)).status).toBe(201);
+  });
+
+  it("applies a publication-specific request limit", async () => {
+    const owner = request.agent(app);
+    await register(owner, "publisher@example.com");
+    const creation = await owner.post("/api/v1/forms").send({
+      title: "Rate-limited publication",
+      fields: [{
+        id: "b3b2c1d0-7a6f-4f52-91af-2f2a5cf56e21",
+        type: "shortText",
+        label: "Your name",
+        description: "",
+        placeholder: "",
+        required: true,
+        options: []
+      }]
+    });
+    const formId = creation.body.data.form.id as string;
+
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      expect((await owner.post(`/api/v1/forms/${formId}/publish`)).status).toBe(201);
+    }
+    const limited = await owner.post(`/api/v1/forms/${formId}/publish`);
+    expect(limited.status).toBe(429);
+    expect(limited.body.error.code).toBe("RATE_LIMITED");
   });
 
   it("rate-limits repeated public submission attempts with the shared error shape", async () => {
@@ -701,6 +1251,48 @@ describe("FormForge API", () => {
       message: "Too many requests. Try again later.",
       requestId: expect.any(String)
     });
+  });
+
+  it("accepts bounded abuse reports only for live public forms", async () => {
+    const owner = request.agent(app);
+    await register(owner, "owner@example.com");
+    const creation = await owner.post("/api/v1/forms").send({
+      title: "Reportable public form",
+      fields: [{
+        id: "b3b2c1d0-7a6f-4f52-91af-2f2a5cf56e21",
+        type: "shortText",
+        label: "Your name",
+        description: "",
+        placeholder: "",
+        required: false,
+        options: []
+      }]
+    });
+    const publication = await owner.post(
+      `/api/v1/forms/${creation.body.data.form.id}/publish`
+    );
+    const slug = publication.body.data.publication.slug as string;
+
+    const report = await request(app).post(`/api/v1/public/forms/${slug}/reports`).send({
+      reason: "phishing",
+      details: "This form asks respondents to disclose credentials.",
+      reporterEmail: "reporter@example.com"
+    });
+    expect(report.status).toBe(201);
+    expect(report.body.data.report).toMatchObject({
+      id: expect.any(String),
+      submittedAt: expect.any(String)
+    });
+
+    const malformed = await request(app).post(`/api/v1/public/forms/${slug}/reports`).send({
+      reason: "anything",
+      details: "x".repeat(1001)
+    });
+    expect(malformed.status).toBe(400);
+    expect(malformed.body.error.code).toBe("VALIDATION_ERROR");
+    expect((await request(app).post("/api/v1/public/forms/missing-form/reports").send({
+      reason: "spam"
+    })).status).toBe(404);
   });
 
   it("creates, lists, updates, and deletes forms for their owner", async () => {

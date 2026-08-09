@@ -78,7 +78,7 @@ The production Atlas URI is supplied to ECS from the SSM Parameter Store
 `SecureString` `/formforge/production/mongodb-uri`. It is never stored in the
 repository or GitHub.
 
-The verified Amazon SES sender is supplied from
+The verified Amazon SES sender for password reset and email verification is supplied from
 `/formforge/production/password-reset-from-email`. The application task role
 can send only through the `PasswordResetSesIdentity` email or domain identity;
 the task execution role reads the sender address without exposing it in the
@@ -87,9 +87,9 @@ that domain, such as `no-reply@formforge.example.com`. The
 `PasswordResetFromAddress` IAM condition restricts sending to that exact
 address.
 
-New SES accounts begin in the sandbox. While sandboxed, reset messages can be
+New SES accounts begin in the sandbox. While sandboxed, transactional messages can be
 sent only to verified recipient identities. Request SES production access
-before treating password recovery as generally available to public users.
+before treating password recovery or first-publication verification as generally available.
 
 Production deployment is a separate, manually triggered GitHub workflow. It
 selects the immutable image for the chosen `main` commit, deploys it to ECS
@@ -124,12 +124,40 @@ repository's `.env` file.
 | `NODE_ENV=production` | Enables secure cookies, trusted proxy handling, and static client serving |
 | `PORT` | Port assigned by the hosting platform |
 | `CLIENT_ORIGIN` | Allowed Vite origin during local development; production CORS is disabled |
-| `PUBLIC_APP_ORIGIN` | Trusted origin used to build password-reset links |
+| `PUBLIC_APP_ORIGIN` | Trusted origin used to build password-reset and verification links |
 | `MONGODB_URI` | Atlas TLS connection string for the least-privilege production database user |
 | `MONGODB_DATABASE` | Optional logical database override used for PR isolation |
 | `SESSION_TTL_HOURS` | Server-side and cookie session lifetime |
 | `PASSWORD_RESET_TTL_MINUTES` | Single-use reset-link lifetime |
-| `PASSWORD_RESET_FROM_EMAIL` | Verified Amazon SES sender |
+| `EMAIL_VERIFICATION_TTL_MINUTES` | Single-use verification-link lifetime |
+| `PASSWORD_RESET_FROM_EMAIL` | Verified Amazon SES sender for both transactional email flows |
+| `REQUIRE_TRANSACTIONAL_EMAIL` | Fail startup when the required SES sender is absent |
+| `TRIAL_MAX_FORMS_PER_ACCOUNT` | Private plus published forms allowed per trial account |
+| `TRIAL_MAX_PUBLISHED_FORMS_PER_ACCOUNT` | Distinct live forms allowed per trial account |
+| `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` | Optional Google web OAuth credentials |
+| `FACEBOOK_APP_ID` / `FACEBOOK_APP_SECRET` | Optional Facebook Login credentials |
+| `FACEBOOK_GRAPH_API_VERSION` | Pinned Meta Graph API version; currently `v25.0` |
+
+The production workflow sets `REQUIRE_TRANSACTIONAL_EMAIL=true`, so configuration
+validation requires the SES sender. The service will not start with a publication gate
+whose verification email cannot be delivered. Isolated previews leave this false until
+their own safe mail-delivery path is configured.
+
+## Social-login provider setup
+
+Social buttons remain hidden unless the corresponding ID and secret are both present.
+Create web credentials in each provider console and register the exact callbacks:
+
+- Local Google: `http://localhost:5173/api/v1/auth/google/callback`
+- Local Facebook: `http://localhost:5173/api/v1/auth/facebook/callback`
+- Production Google: `${PUBLIC_APP_ORIGIN}/api/v1/auth/google/callback`
+- Production Facebook: `${PUBLIC_APP_ORIGIN}/api/v1/auth/facebook/callback`
+
+Google requires the `openid email profile` scopes. Facebook Login requires
+`public_profile,email`; configure the privacy-policy and data-deletion surfaces required
+by Meta before changing the app to live mode. Store client/app secrets as SSM
+`SecureString` values and expose them through the ECS task `secrets` list only after the
+parameters exist. Do not place either secret in GitHub variables, source, or build output.
 
 ## Verified release record
 

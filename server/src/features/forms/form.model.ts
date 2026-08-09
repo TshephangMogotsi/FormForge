@@ -5,6 +5,7 @@ const { Schema } = mongoose;
 
 export type FormDatabaseRecord = {
   ownerId: Types.ObjectId;
+  sourceGuestDraftId?: string;
   title: string;
   description: string;
   fields: FormField[];
@@ -43,6 +44,11 @@ const formSchema = new Schema<FormDatabaseRecord>(
       required: true,
       index: true,
       ref: "User"
+    },
+    sourceGuestDraftId: {
+      type: String,
+      trim: true,
+      lowercase: true
     },
     title: {
       type: String,
@@ -89,6 +95,13 @@ const formSchema = new Schema<FormDatabaseRecord>(
 );
 
 formSchema.index({ ownerId: 1, updatedAt: -1 });
+formSchema.index(
+  { ownerId: 1, sourceGuestDraftId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { sourceGuestDraftId: { $type: "string" } }
+  }
+);
 formSchema.index({ slug: 1 }, { unique: true, sparse: true });
 
 export const FormModel =

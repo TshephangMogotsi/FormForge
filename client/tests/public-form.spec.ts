@@ -114,3 +114,40 @@ test("keeps a public form usable on mobile through slow and interrupted requests
   await expect(page.getByRole("heading", { name: "Response received" })).toBeVisible();
   expect(submissionAttempts).toBe(2);
 });
+
+test("links public forms to trust guidance and submits a bounded abuse report", async ({ page }) => {
+  let reportBody: Record<string, unknown> | null = null;
+  await page.route(`**/api/v1/public/forms/${slug}`, (route) =>
+    json(route, { data: { form: publishedForm } })
+  );
+  await page.route(`**/api/v1/public/forms/${slug}/reports`, async (route) => {
+    reportBody = route.request().postDataJSON() as Record<string, unknown>;
+    await json(route, {
+      data: {
+        report: {
+          id: "000000000000000000002001",
+          submittedAt: "2026-08-09T09:00:00.000Z"
+        }
+      }
+    }, 201);
+  });
+
+  await page.goto(`/f/${slug}`);
+  await page.getByRole("link", { name: "Report abuse" }).click();
+  await expect(page).toHaveURL(`/report-abuse?form=${slug}`);
+  await expect(page.getByLabel("Public form identifier")).toHaveValue(slug);
+  await page.getByLabel("Reason").selectOption("phishing");
+  await page.getByLabel("Details (optional)").fill("This form asks for account credentials.");
+  await page.getByRole("button", { name: "Submit report" }).click();
+
+  await expect(page.getByRole("heading", { name: "Thank you for flagging this form" })).toBeVisible();
+  expect(reportBody).toMatchObject({
+    reason: "phishing",
+    details: "This form asks for account credentials."
+  });
+
+  await page.goto("/privacy");
+  await expect(page.getByRole("heading", { name: "What FormForge stores" })).toBeVisible();
+  await page.goto("/acceptable-use");
+  await expect(page.getByRole("heading", { name: "Build forms people can trust" })).toBeVisible();
+});

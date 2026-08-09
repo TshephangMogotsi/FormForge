@@ -87,6 +87,7 @@ export const updateFormSchema = z
   });
 
 export const formIdSchema = z.string().regex(/^[a-f\d]{24}$/i, "Enter a valid form identifier.");
+export const guestDraftIdSchema = z.uuid("Enter a valid guest draft identifier.");
 
 export const publicFormSlugSchema = z
   .string()
@@ -120,6 +121,20 @@ export const createSubmissionSchema = z
       seenFieldIds.add(answer.fieldId);
     });
   });
+
+export const abuseReportSchema = z
+  .object({
+    reason: z.enum(["spam", "phishing", "harmful", "other"]),
+    details: z.string().trim().max(1000).default(""),
+    reporterEmail: z.union([z.literal(""), z.string().trim().email().max(254)]).default("")
+  })
+  .strict()
+  .transform((input) => ({
+    ...input,
+    reporterEmail: input.reporterEmail || null
+  }));
+
+export type AbuseReportInput = z.infer<typeof abuseReportSchema>;
 
 export const listFormsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),

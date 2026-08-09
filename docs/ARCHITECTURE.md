@@ -2,16 +2,19 @@
 
 ## System context
 
-FormForge is a modular MERN application with two user-facing surfaces:
+FormForge is a modular MERN application with three user-facing surfaces:
 
+- The guest builder, which stores one bounded draft in the visitor's browser.
 - The authenticated owner application used to build forms and inspect results.
 - The public form runtime used by respondents, often from mobile devices.
 
 ```mermaid
 flowchart LR
+    Visitor["Guest visitor"] --> Guest["React guest builder"]
     Owner["Form owner"] --> Client["React owner application"]
     Respondent["Form respondent"] --> Public["React public form runtime"]
-    Client --> API["Express REST API"]
+    Guest -. authenticate and claim .-> API["Express REST API"]
+    Client --> API
     Public --> API
     API --> Mongo["MongoDB"]
     API -. optional .-> AI["AI provider adapter"]
@@ -59,11 +62,22 @@ flowchart LR
 
 ### Draft editing
 
-1. The builder loads the owner-scoped form through the REST API.
-2. Dragging, ordering, and property edits remain immediate React interaction state.
-3. After a short idle period, the client sends the complete bounded draft to one
+1. A guest builder initializes one versioned browser draft, while an authenticated
+   builder loads an owner-scoped form through the REST API.
+2. Both modes use the same draft contract and editor; dragging, ordering, and property
+   edits remain immediate React interaction state.
+3. Guest changes persist locally and never create anonymous server records. After a
+   short idle period, the authenticated controller sends the complete bounded draft to one
    owner-scoped update endpoint and exposes pending, saving, saved, and failed states.
-4. Zod validates stable UUIDs, field types, lengths, option constraints, and the
+4. When a guest requests an account capability, authentication completes first and an
+   idempotent claim creates a new owner-scoped form from the complete guest draft.
+5. The client replaces the guest route with the canonical owner edit URL and resumes
+   only the small pending capability intent. A publish failure leaves the claimed draft
+   intact and retryable; form content never enters the URL.
+6. If an owned save or publication receives `401`, the builder retains its in-memory
+   draft, requests same-owner reauthentication in place, and retries the interrupted
+   action after the session is restored.
+7. Zod validates stable UUIDs, field types, lengths, option constraints, and the
    maximum field count before MongoDB atomically replaces the embedded draft array.
 
 ### Submission
@@ -100,16 +114,39 @@ general API boundary.
 - Password-reset requests return the same response for known and unknown email
   addresses. Reset tokens are random, stored only as SHA-256 digests, expire,
   are consumed once, and revoke all existing sessions after a password change.
+- Email-verification tokens are independently hashed, expiring, and single-use.
+  Unverified owners can retain private drafts but the API rejects publication.
+- Publication, verification, public submission, and abuse-report writes have distinct
+  rate-limit policies. Owner-scoped trial caps bound forms and distinct live forms.
 - Ownership is included in MongoDB read, update, and delete filters. An inaccessible
   resource returns `404` so its existence is not disclosed.
 - Public slugs identify published forms but do not grant owner access.
 - HTTP-only cookies are inaccessible to application JavaScript.
+- Google and Facebook use server-side authorization-code adapters behind one social
+  identity interface. Random state, Google PKCE and nonce checks protect the callback;
+  provider tokens are discarded after the bounded profile exchange. The resulting
+  FormForge session uses the same revocable opaque cookie as password login.
 - SameSite cookies, JSON-only request bodies, origin-aware CORS, rate limiting,
   request-size limits, and security headers reduce common browser and API attacks.
 - Secrets stay in runtime configuration and never enter logs or source control.
 - Generated AI output and third-party responses are treated as untrusted input.
 - Builder validation in the browser improves feedback but never replaces the API's
   authoritative validation of every persisted field definition.
+
+## Acquisition measurement boundary
+
+The guest journey sends a first-party, same-origin event envelope to the modular API.
+Its strict schema contains only event name, occurrence time, random anonymous/session
+correlation, sanitized campaign, device class, and a bounded failure category. It has
+no generic metadata field, so form content, account identifiers, and respondent data
+cannot enter the collection through the supported contract. MongoDB removes records
+after 90 days through a TTL index, and `npm run report:funnel --workspace server`
+produces aggregate step and failure-category counts without printing correlation IDs.
+
+The public form, guest builder, and owned builder remain separate lazy chunks. The
+production build enforces a 150 KiB gzip initial-JavaScript budget and a 10 KiB gzip
+public-form route budget; the 2026-08-09 local build measured 76.98 KiB and 1.96 KiB
+respectively.
 
 ## Production reference
 
@@ -149,6 +186,11 @@ application boundary.
 Password-reset delivery is behind a notifier interface. The production adapter
 uses the ECS application task role to call Amazon SES from one verified sender;
 the domain service remains independent of AWS.
+
+Social identity providers are optional runtime adapters. Google ID tokens are verified
+with Google's maintained Node library and a fixed client audience. Facebook profile
+requests are pinned to a configured Graph API version. Both adapters use eight-second
+timeouts and request only identity scopes; no refresh or provider access token is stored.
 
 The no-cost MVP uses Atlas's public TLS endpoint because Free and Flex clusters do not
 support PrivateLink and ECS Express tasks do not have stable public addresses. A broad

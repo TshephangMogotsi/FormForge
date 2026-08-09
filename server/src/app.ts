@@ -8,6 +8,11 @@ import { env } from "./config/env.js";
 import { createAuthRouter } from "./features/auth/auth.routes.js";
 import { AuthService } from "./features/auth/auth.service.js";
 import {
+  DisabledEmailVerificationNotifier
+} from "./features/auth/email-verification.notifier.js";
+import { MongooseEmailVerificationRepository } from "./features/auth/email-verification.repository.js";
+import { EmailVerificationService } from "./features/auth/email-verification.service.js";
+import {
   DisabledPasswordResetNotifier
 } from "./features/auth/password-reset.notifier.js";
 import { MongoosePasswordResetRepository } from "./features/auth/password-reset.repository.js";
@@ -15,11 +20,18 @@ import { PasswordResetService } from "./features/auth/password-reset.service.js"
 import { MongooseSessionRepository } from "./features/auth/session.repository.js";
 import { SessionService } from "./features/auth/session.service.js";
 import { SesPasswordResetNotifier } from "./features/auth/ses-password-reset.notifier.js";
+import { SesEmailVerificationNotifier } from "./features/auth/ses-email-verification.notifier.js";
 import { MongooseUserRepository } from "./features/auth/user.repository.js";
+import { GoogleOAuthProvider } from "./features/auth/google-oauth.provider.js";
+import { FacebookOAuthProvider } from "./features/auth/facebook-oauth.provider.js";
+import type { SocialOAuthProvider } from "./features/auth/social-oauth.provider.js";
 import { MongooseFormRepository } from "./features/forms/form.repository.js";
 import { createFormRouter } from "./features/forms/form.routes.js";
 import { FormService } from "./features/forms/form.service.js";
 import { createPublicFormRouter } from "./features/forms/public-form.routes.js";
+import { MongooseFunnelRepository } from "./features/funnel/funnel.repository.js";
+import { createFunnelRouter } from "./features/funnel/funnel.routes.js";
+import { FunnelService } from "./features/funnel/funnel.service.js";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
 import { createRateLimiter, rateLimitPolicies } from "./middleware/rate-limit.js";
 import { requestContext } from "./middleware/request-context.js";
@@ -31,6 +43,8 @@ import {
 export type AppServices = {
   auth: AuthService;
   forms: FormService;
+  funnel: FunnelService;
+  socialOAuthProviders: SocialOAuthProvider[];
 };
 
 export type AppOptions = {
@@ -44,6 +58,30 @@ function createDefaultServices(): AppServices {
   const passwordResetNotifier = env.PASSWORD_RESET_FROM_EMAIL
     ? new SesPasswordResetNotifier(env.PASSWORD_RESET_FROM_EMAIL)
     : new DisabledPasswordResetNotifier();
+  const emailVerificationNotifier = env.PASSWORD_RESET_FROM_EMAIL
+    ? new SesEmailVerificationNotifier(env.PASSWORD_RESET_FROM_EMAIL)
+    : new DisabledEmailVerificationNotifier();
+
+  const socialOAuthProviders: SocialOAuthProvider[] = [];
+  if (env.GOOGLE_OAUTH_CLIENT_ID && env.GOOGLE_OAUTH_CLIENT_SECRET) {
+    socialOAuthProviders.push(
+      new GoogleOAuthProvider(
+        env.GOOGLE_OAUTH_CLIENT_ID,
+        env.GOOGLE_OAUTH_CLIENT_SECRET,
+        new URL("/api/v1/auth/google/callback", env.PUBLIC_APP_ORIGIN).toString()
+      )
+    );
+  }
+  if (env.FACEBOOK_OAUTH_ENABLED && env.FACEBOOK_APP_ID && env.FACEBOOK_APP_SECRET) {
+    socialOAuthProviders.push(
+      new FacebookOAuthProvider(
+        env.FACEBOOK_APP_ID,
+        env.FACEBOOK_APP_SECRET,
+        new URL("/api/v1/auth/facebook/callback", env.PUBLIC_APP_ORIGIN).toString(),
+        env.FACEBOOK_GRAPH_API_VERSION
+      )
+    );
+  }
 
   return {
     auth: new AuthService(
@@ -54,9 +92,20 @@ function createDefaultServices(): AppServices {
         passwordResetNotifier,
         env.PUBLIC_APP_ORIGIN,
         env.PASSWORD_RESET_TTL_MINUTES
+      ),
+      new EmailVerificationService(
+        new MongooseEmailVerificationRepository(),
+        emailVerificationNotifier,
+        env.PUBLIC_APP_ORIGIN,
+        env.EMAIL_VERIFICATION_TTL_MINUTES
       )
     ),
-    forms: new FormService(new MongooseFormRepository())
+    forms: new FormService(new MongooseFormRepository(), {
+      maxFormsPerOwner: env.TRIAL_MAX_FORMS_PER_ACCOUNT,
+      maxPublishedFormsPerOwner: env.TRIAL_MAX_PUBLISHED_FORMS_PER_ACCOUNT
+    }),
+    funnel: new FunnelService(new MongooseFunnelRepository()),
+    socialOAuthProviders
   };
 }
 
@@ -92,9 +141,10 @@ export function createApp(
     createHealthRouter(options.databaseReadinessCheck)
   );
   app.use("/api", createRateLimiter(rateLimitPolicies.api));
-  app.use("/api/v1/auth", createAuthRouter(services.auth));
+  app.use("/api/v1/auth", createAuthRouter(services.auth, services.socialOAuthProviders));
   app.use("/api/v1/forms", createFormRouter(services.auth, services.forms));
   app.use("/api/v1/public/forms", createPublicFormRouter(services.forms));
+  app.use("/api/v1/events", createFunnelRouter(services.funnel));
 
   if (env.NODE_ENV === "production") {
     app.use(
